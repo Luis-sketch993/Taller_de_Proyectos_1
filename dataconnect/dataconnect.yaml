@@ -1,0 +1,12 @@
+specVersion: "v1beta"
+serviceId: "saferoute"
+location: "us-central1"
+schema:
+  source: "./schema"
+  datasource:
+    postgresql:
+      database: "fdcdb"
+      cloudSql:
+        instanceId: "saferoute-fdc"
+      # schemaValidation: "COMPATIBLE"
+connectorDirs: ["./connector"]
