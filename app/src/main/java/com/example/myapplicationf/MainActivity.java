@@ -4,9 +4,11 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -46,6 +48,8 @@ public class MainActivity extends AppCompatActivity {
         mantenerSesion = findViewById(R.id.chkSesion);
         botonIniciar = findViewById(R.id.btnIniciar);
         botonregistrarse = findViewById(R.id.btnRegistrarse);
+        TextView RecuperarContraseña = findViewById(R.id.tvOlvideContraseña);
+        TextView CambiarContraseña = findViewById(R.id.tvCambiarMiContraseña);
 
         mAuth = FirebaseAuth.getInstance();
         //Aquí se establece la conexión con Firestore
@@ -62,6 +66,22 @@ public class MainActivity extends AppCompatActivity {
                 cargarDatosUsuario(user.getUid());
             }
         }
+        RecuperarContraseña.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent recuperar = new Intent(MainActivity.this, RecuperarContrasena.class);
+                startActivity(recuperar);
+            }
+        });
+
+        CambiarContraseña.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Intent cambiar = new Intent(MainActivity.this, CambiarContrasena.class);
+                startActivity(cambiar);
+            }
+        });
+
 
         // BOTÓN REGISTRARSE -> pasa a MainActivity3
         botonregistrarse.setOnClickListener(view -> {
@@ -118,11 +138,12 @@ public class MainActivity extends AppCompatActivity {
 
     // REDIRECCIONAR AL HOME
     private void showHome(String nombre, String apellido, String email) {
-        Intent homeIntent = new Intent(this, MainActivity2.class);
+        Intent homeIntent = new Intent(this, ContenidoGeneral.class);
         homeIntent.putExtra("nombre", nombre);
         homeIntent.putExtra("apellido", apellido);
         homeIntent.putExtra("email", email);
         startActivity(homeIntent);
         finish();
     }
+
 }

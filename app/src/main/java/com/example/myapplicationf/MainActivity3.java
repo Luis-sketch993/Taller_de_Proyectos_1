@@ -79,7 +79,7 @@ public class MainActivity3 extends AppCompatActivity {
                                     .set(usuario)
                                     .addOnSuccessListener(aVoid -> {
                                         Toast.makeText(this, "Usuario registrado correctamente", Toast.LENGTH_SHORT).show();
-                                        Intent intent = new Intent(this, MainActivity2.class);
+                                        Intent intent = new Intent(this, ContenidoGeneral.class);
                                         intent.putExtra("email", email);
                                         intent.putExtra("nombre", nombre);
                                         startActivity(intent);
