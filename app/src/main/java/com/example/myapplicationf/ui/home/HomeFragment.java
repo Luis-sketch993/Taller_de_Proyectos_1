@@ -2,6 +2,8 @@ package com.example.myapplicationf.ui.home;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.location.Address;
+import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Looper;
@@ -13,11 +15,12 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.NavController;
+import androidx.navigation.Navigation;
 
 import android.graphics.Color;
 
 import com.example.myapplicationf.R;
-import com.example.myapplicationf.Models.Reporte;
 import com.example.myapplicationf.Models.Alertas;
 import com.example.myapplicationf.Utils.NotificacionHelper;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -33,6 +36,9 @@ import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.firebase.firestore.FirebaseFirestore;
+
+import java.util.List;
+import java.util.Locale;
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
@@ -118,7 +124,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     }
 
     private void verificarZona(double lat, double lng) {
-        // Ejemplo: zona segura fija (puedes reemplazar con zonas de Firestore si quieres)
         LatLng zonaSegura = new LatLng(-13.53195, -71.967463);
 
         float[] distancia = new float[1];
@@ -131,17 +136,15 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             mensaje = "Zona de riesgo, mantente alerta";
         }
 
-        // Notificación local
         NotificacionHelper.mostrar(requireContext(), mensaje);
 
-        // Guardar alerta en Firestore
         db.collection("alertas").add(new Alertas(mensaje, System.currentTimeMillis()));
     }
 
     private void dibujarZonasDesdeFirestore() {
         if(mMap == null) return;
 
-        mMap.clear(); // Limpiar círculos anteriores
+        mMap.clear();
 
         db.collection("reportes").addSnapshotListener((snapshots, e) -> {
             if (e != null || snapshots == null) return;
@@ -153,9 +156,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
                 int color;
                 switch (riesgo) {
-                    case 1: color = Color.parseColor("#5533FF33"); break; // Verde
-                    case 2: color = Color.parseColor("#55FFA500"); break; // Naranja
-                    default: color = Color.parseColor("#55FF3333"); break; // Rojo
+                    case 1: color = Color.parseColor("#5533FF33"); break;
+                    case 2: color = Color.parseColor("#55FFA500"); break;
+                    default: color = Color.parseColor("#55FF3333"); break;
                 }
 
                 LatLng posicion = new LatLng(lat, lng);
@@ -178,23 +181,45 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         mMap = googleMap;
 
-        // Posición inicial
         LatLng cusco = new LatLng(-13.53195, -71.967463);
         mMap.addMarker(new MarkerOptions().position(cusco).title("Cusco Default"));
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(cusco, 15));
 
-        // Dibujar zonas dinámicamente desde Firestore
         dibujarZonasDesdeFirestore();
 
-        // Click en mapa para reportes
+        // 🔹 Click en mapa para seleccionar ubicación
         mMap.setOnMapClickListener(latLng -> {
-            Reporte reporte = new Reporte(latLng.latitude, latLng.longitude, "Reportado por usuario");
+            Bundle bundle = new Bundle();
+            bundle.putDouble("lat", latLng.latitude);
+            bundle.putDouble("lng", latLng.longitude);
 
-            db.collection("reportes").add(reporte);
+            // 🔹 Obtener nombre del lugar con Geocoder
+            String nombreLugar = "Ubicación seleccionada";
+            try {
+                Geocoder geocoder = new Geocoder(requireContext(), Locale.getDefault());
+                List<Address> direcciones = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1);
+                if (direcciones != null && !direcciones.isEmpty()) {
+                    Address dir = direcciones.get(0);
 
-            mMap.addMarker(new MarkerOptions().position(latLng).title("Reporte enviado"));
-            NotificacionHelper.mostrar(requireContext(),
-                    "Has reportado una zona: " + latLng.latitude + ", " + latLng.longitude);
+                    // ✅ Forzar dirección legible (sin plus code)
+                    if (dir.getThoroughfare() != null) {
+                        nombreLugar = dir.getThoroughfare(); // Ejemplo: "Av. Jorge Chavez"
+                        if (dir.getSubThoroughfare() != null) {
+                            nombreLugar += " " + dir.getSubThoroughfare(); // Ejemplo: "Av. Jorge Chavez 123"
+                        }
+                    } else if (dir.getAddressLine(0) != null) {
+                        nombreLugar = dir.getAddressLine(0); // Dirección completa
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            bundle.putString("nombreLugar", nombreLugar);
+
+            NavController navController = Navigation.findNavController(requireActivity(),
+                    R.id.nav_host_fragment_content_contenido_general);
+            navController.navigate(R.id.nav_gallery, bundle);
         });
     }
 }
