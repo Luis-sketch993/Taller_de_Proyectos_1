@@ -8,6 +8,7 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
@@ -28,10 +29,9 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.Circle;
-import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.CircleOptions;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
@@ -40,10 +40,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private FirebaseFirestore db;
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
-
-    // Zonas de ejemplo
-    private final LatLng zonaSegura = new LatLng(-13.53195, -71.967463);
-    private final LatLng zonaPeligrosa = new LatLng(-13.53250, -71.968000);
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -91,11 +87,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 // Actualizar ubicación en Firestore
                 actualizarUbicacion(lat, lng);
 
-                // Verificar zona y notificar
+                // Guardar alerta en función de la zona
                 verificarZona(lat, lng);
             }
         };
-        // Verificar permisos de ubicación
+
+        // Verificar permisos
         if (ActivityCompat.checkSelfPermission(requireContext(),
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(requireContext(),
@@ -114,48 +111,16 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 .addOnSuccessListener(aVoid -> {
                     if(mMap != null){
                         LatLng posicion = new LatLng(lat, lng);
-                        mMap.clear();
-                        mMap.addMarker(new MarkerOptions().position(posicion).title("Tu ubicación"));
                         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(posicion, 15));
-                        dibujarZonas();
                     }
                 })
                 .addOnFailureListener(Throwable::printStackTrace);
     }
 
-    private void dibujarZonas() {
-        if(mMap == null) return;
-
-        // Zona segura
-        Circle zonaS = mMap.addCircle(new CircleOptions()
-                .center(zonaSegura)
-                .radius(100)
-                .strokeColor(Color.GREEN)
-                .fillColor(Color.parseColor("#5533FF33")));
-
-        // Zona peligrosa
-        Circle zonaP = mMap.addCircle(new CircleOptions()
-                .center(zonaPeligrosa)
-                .radius(100)
-                .strokeColor(Color.RED)
-                .fillColor(Color.parseColor("#55FF3333")));
-
-        // Click en mapa para reportes
-        mMap.setOnMapClickListener(latLng -> {
-            // Crear reporte
-            Reporte reporte = new Reporte(latLng.latitude, latLng.longitude, "Reportado por usuario");
-            db.collection("reportes").add(reporte);
-
-            // Agregar marcador
-            mMap.addMarker(new MarkerOptions().position(latLng).title("Reporte enviado"));
-
-            // Notificación
-            NotificacionHelper.mostrar(requireContext(), "Has reportado una zona: " +
-                    latLng.latitude + ", " + latLng.longitude);
-        });
-    }
-
     private void verificarZona(double lat, double lng) {
+        // Ejemplo: zona segura fija (puedes reemplazar con zonas de Firestore si quieres)
+        LatLng zonaSegura = new LatLng(-13.53195, -71.967463);
+
         float[] distancia = new float[1];
         Location.distanceBetween(lat, lng, zonaSegura.latitude, zonaSegura.longitude, distancia);
 
@@ -173,14 +138,63 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         db.collection("alertas").add(new Alertas(mensaje, System.currentTimeMillis()));
     }
 
+    private void dibujarZonasDesdeFirestore() {
+        if(mMap == null) return;
+
+        mMap.clear(); // Limpiar círculos anteriores
+
+        db.collection("reportes").addSnapshotListener((snapshots, e) -> {
+            if (e != null || snapshots == null) return;
+
+            for (var doc : snapshots.getDocuments()) {
+                double lat = doc.getDouble("lat");
+                double lng = doc.getDouble("lng");
+                int riesgo = doc.getLong("riesgo") != null ? doc.getLong("riesgo").intValue() : 1;
+
+                int color;
+                switch (riesgo) {
+                    case 1: color = Color.parseColor("#5533FF33"); break; // Verde
+                    case 2: color = Color.parseColor("#55FFA500"); break; // Naranja
+                    default: color = Color.parseColor("#55FF3333"); break; // Rojo
+                }
+
+                LatLng posicion = new LatLng(lat, lng);
+                mMap.addCircle(new CircleOptions()
+                        .center(posicion)
+                        .radius(100)
+                        .strokeColor(color)
+                        .fillColor(color)
+                );
+            }
+        });
+    }
+
     @Override
     public void onMapReady(GoogleMap googleMap) {
+
+        FrameLayout mapContainer = getView().findViewById(R.id.mapContainer);
+        View legendView = LayoutInflater.from(getContext()).inflate(R.layout.legend_layout, mapContainer, false);
+        mapContainer.addView(legendView);
+
         mMap = googleMap;
 
+        // Posición inicial
         LatLng cusco = new LatLng(-13.53195, -71.967463);
         mMap.addMarker(new MarkerOptions().position(cusco).title("Cusco Default"));
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(cusco, 15));
 
-        dibujarZonas();
+        // Dibujar zonas dinámicamente desde Firestore
+        dibujarZonasDesdeFirestore();
+
+        // Click en mapa para reportes
+        mMap.setOnMapClickListener(latLng -> {
+            Reporte reporte = new Reporte(latLng.latitude, latLng.longitude, "Reportado por usuario");
+
+            db.collection("reportes").add(reporte);
+
+            mMap.addMarker(new MarkerOptions().position(latLng).title("Reporte enviado"));
+            NotificacionHelper.mostrar(requireContext(),
+                    "Has reportado una zona: " + latLng.latitude + ", " + latLng.longitude);
+        });
     }
 }
