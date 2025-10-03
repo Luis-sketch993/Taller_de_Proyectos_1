@@ -12,11 +12,79 @@
         android:layout_margin="8dp"
         android:spinnerMode="dropdown" />
 
-    <!-- 🔹 Contenedor del mapa -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="3dp"
+        android:background="@android:color/white">
+
+        <AutoCompleteTextView
+            android:id="@+id/etOrigen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Punto de Origen"
+            android:drawableLeft="@android:drawable/ic_menu_mylocation"
+            android:padding="8dp"
+            android:layout_marginBottom="6dp"
+            android:background="@android:drawable/edit_text" />
+
+        <AutoCompleteTextView
+            android:id="@+id/etDestino"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="Punto de Destino"
+            android:drawableLeft="@android:drawable/ic_menu_directions"
+            android:padding="8dp"
+            android:background="@android:drawable/edit_text" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/white"
+        android:orientation="horizontal"
+        android:padding="3dp">
+
+        <!-- Filtro de información -->
+        <Spinner
+            android:id="@+id/spinnerFiltro"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:spinnerMode="dropdown" />
+
+        <!-- Selector de modo de transporte -->
+        <Spinner
+            android:id="@+id/spinnerModo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:spinnerMode="dropdown" />
+
+        <!-- Botón para calcular ruta -->
+        <Button
+            android:id="@+id/btnCalcularRuta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Calcular Ruta" />
+
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvTiempo"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/white"
+        android:padding="8dp"
+        android:text="Tiempo estimado: "
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
     <FrameLayout
         android:id="@+id/mapContainer"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="0dp"
+        android:layout_weight="1">
 
         <fragment
             android:id="@+id/map"
