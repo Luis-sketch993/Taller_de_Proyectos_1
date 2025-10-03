@@ -4,7 +4,7 @@ public class Reporte {
     private double lat;
     private double lng;
     private String descripcion;
-    private String nombreLugar; // 🔹 nuevo campo para el lugar
+    private String nombreLugar; //  nuevo campo para el lugar
 
     // Constructor vacío necesario para Firestore
     public Reporte() {}

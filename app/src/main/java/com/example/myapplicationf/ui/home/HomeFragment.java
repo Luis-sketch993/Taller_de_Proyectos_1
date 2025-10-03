@@ -30,6 +30,7 @@ import android.graphics.Color;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.example.myapplicationf.Models.Reporte;
 import com.example.myapplicationf.R;
 import com.example.myapplicationf.Models.Alertas;
 import com.example.myapplicationf.Utils.NotificacionHelper;
@@ -645,6 +646,20 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(cusco, 15));
 
         dibujarZonasDesdeFirestore();
+        mMap.setOnMapClickListener(latLng -> {
+            Bundle bundle = new Bundle();
+            bundle.putDouble("lat", latLng.latitude);
+            bundle.putDouble("lng", latLng.longitude);
+            bundle.putString("nombreLugar", "Lugar seleccionado en el mapa");
+
+            NavController navController = Navigation.findNavController(
+                    requireActivity(),
+                    R.id.nav_host_fragment_content_contenido_general
+            );
+            navController.navigate(R.id.nav_gallery, bundle);
+        });
+
+
     }
 
     // 🔹 Mostrar lugares turísticos cercanos
