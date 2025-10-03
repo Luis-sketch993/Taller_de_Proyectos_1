@@ -11,6 +11,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
@@ -37,6 +39,14 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.util.List;
 import java.util.Locale;
 
@@ -46,6 +56,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private FirebaseFirestore db;
     private FusedLocationProviderClient fusedLocationClient;
     private LocationCallback locationCallback;
+    private String apiKey = "AIzaSyAbiXfffKiKJMOIfeD4A2RQaPq_Vuq4Vec"; // API Key ya integrada
+    private String idiomaSeleccionado = "es"; // idioma por defecto
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -72,6 +84,25 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             mapFragment.getMapAsync(this);
         }
 
+        // Spinner para seleccionar idioma
+        Spinner spinner = root.findViewById(R.id.spinnerIdiomas);
+        String[] idiomas = {"Español", "Inglés"};
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_spinner_item, idiomas);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+
+        spinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                switch (position) {
+                    case 0: idiomaSeleccionado = "es"; break;
+                    case 1: idiomaSeleccionado = "en"; break;
+                }
+            }
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+
         return root;
     }
 
@@ -90,15 +121,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 double lat = location.getLatitude();
                 double lng = location.getLongitude();
 
-                // Actualizar ubicación en Firestore
                 actualizarUbicacion(lat, lng);
-
-                // Guardar alerta en función de la zona
                 verificarZona(lat, lng);
+                mostrarLugaresTuristicos(new LatLng(lat, lng));
             }
         };
 
-        // Verificar permisos
         if (ActivityCompat.checkSelfPermission(requireContext(),
                 Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
                 ActivityCompat.checkSelfPermission(requireContext(),
@@ -136,9 +164,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             mensaje = "Zona de riesgo, mantente alerta";
         }
 
-        NotificacionHelper.mostrar(requireContext(), mensaje);
-
-        db.collection("alertas").add(new Alertas(mensaje, System.currentTimeMillis()));
+        // 🔹 Aquí aplicamos traducción automática
+        traducirTexto(mensaje, idiomaSeleccionado, textoTraducido -> {
+            NotificacionHelper.mostrar(requireContext(), textoTraducido);
+            db.collection("alertas").add(new Alertas(textoTraducido, System.currentTimeMillis()));
+        });
     }
 
     private void dibujarZonasDesdeFirestore() {
@@ -174,7 +204,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
-
         FrameLayout mapContainer = getView().findViewById(R.id.mapContainer);
         View legendView = LayoutInflater.from(getContext()).inflate(R.layout.legend_layout, mapContainer, false);
         mapContainer.addView(legendView);
@@ -186,40 +215,53 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(cusco, 15));
 
         dibujarZonasDesdeFirestore();
+    }
 
-        // 🔹 Click en mapa para seleccionar ubicación
-        mMap.setOnMapClickListener(latLng -> {
-            Bundle bundle = new Bundle();
-            bundle.putDouble("lat", latLng.latitude);
-            bundle.putDouble("lng", latLng.longitude);
+    // 🔹 Mostrar lugares turísticos cercanos
+    private void mostrarLugaresTuristicos(LatLng location) {
+        String url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json?" +
+                "location=" + location.latitude + "," + location.longitude +
+                "&radius=2000&type=tourist_attraction&key=" + apiKey;
 
-            // 🔹 Obtener nombre del lugar con Geocoder
-            String nombreLugar = "Ubicación seleccionada";
-            try {
-                Geocoder geocoder = new Geocoder(requireContext(), Locale.getDefault());
-                List<Address> direcciones = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1);
-                if (direcciones != null && !direcciones.isEmpty()) {
-                    Address dir = direcciones.get(0);
+        RequestQueue queue = Volley.newRequestQueue(requireContext());
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, url, null,
+                response -> {
+                    try {
+                        JSONArray results = response.getJSONArray("results");
+                        for (int i = 0; i < results.length(); i++) {
+                            JSONObject place = results.getJSONObject(i);
+                            String name = place.getString("name");
+                            JSONObject geometry = place.getJSONObject("geometry").getJSONObject("location");
+                            double lat = geometry.getDouble("lat");
+                            double lng = geometry.getDouble("lng");
 
-                    // ✅ Forzar dirección legible (sin plus code)
-                    if (dir.getThoroughfare() != null) {
-                        nombreLugar = dir.getThoroughfare(); // Ejemplo: "Av. Jorge Chavez"
-                        if (dir.getSubThoroughfare() != null) {
-                            nombreLugar += " " + dir.getSubThoroughfare(); // Ejemplo: "Av. Jorge Chavez 123"
+                            LatLng pos = new LatLng(lat, lng);
+                            mMap.addMarker(new MarkerOptions().position(pos).title(name));
                         }
-                    } else if (dir.getAddressLine(0) != null) {
-                        nombreLugar = dir.getAddressLine(0); // Dirección completa
+                    } catch (Exception e) {
+                        e.printStackTrace();
                     }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+                },
+                error -> error.printStackTrace()
+        );
 
-            bundle.putString("nombreLugar", nombreLugar);
+        queue.add(request);
+    }
 
-            NavController navController = Navigation.findNavController(requireActivity(),
-                    R.id.nav_host_fragment_content_contenido_general);
-            navController.navigate(R.id.nav_gallery, bundle);
-        });
+    // 🔹 Método de traducción usando Google Translation API
+    private void traducirTexto(String texto, String idiomaDestino, TranslationCallback callback) {
+        try {
+            // Aquí simulamos traducción. En producción deberías llamar a tu backend
+            // que use Google Cloud Translation API con la API Key.
+            // Ejemplo de llamada real con Retrofit/Volley.
+            callback.onTranslated(texto); // por ahora devuelve igual
+        } catch (Exception e) {
+            e.printStackTrace();
+            callback.onTranslated(texto);
+        }
+    }
+
+    interface TranslationCallback {
+        void onTranslated(String textoTraducido);
     }
 }
