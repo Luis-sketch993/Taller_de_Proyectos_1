@@ -7,10 +7,8 @@ import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
 import android.os.Bundle;
-import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -32,13 +30,9 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
+import com.example.myapplicationf.ContenidoGeneral;
 import com.example.myapplicationf.Models.Reporte;
 import com.example.myapplicationf.R;
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -70,47 +64,39 @@ import java.util.Locale;
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
-    private static final String TAG = "RutaSeguraDebug";
-
     private GoogleMap mMap;
     private FirebaseFirestore db;
-    private FusedLocationProviderClient fusedLocationProviderClient;
     private PlacesClient placesClient;
 
     private AutoCompleteTextView etOrigen, etDestino;
     private LatLng origenLatLng, destinoLatLng;
     private List<Reporte> listaDeReportes = new ArrayList<>();
     private TextView tvTiempo;
+    private Button btnCalcularRuta;
 
-    // --- 🔹 CAMBIO CLAVE: Listas para gestionar elementos del mapa sin usar mMap.clear() ---
     private List<Polyline> polylinesActuales = new ArrayList<>();
     private List<Circle> circleReportesActuales = new ArrayList<>();
     private List<Marker> markersActuales = new ArrayList<>();
 
     private String modoTransporte = "driving";
+    private String idiomaSeleccionado = "es";
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_home, container, false);
 
         db = FirebaseFirestore.getInstance();
-        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(requireActivity());
-
         if (!Places.isInitialized()) {
-            String apiKey = getApiKey();
-            if (apiKey.isEmpty()) {
-                Toast.makeText(getContext(), "API Key de Google Maps no encontrada.", Toast.LENGTH_LONG).show();
-            } else {
-                Places.initialize(requireContext(), apiKey, Locale.getDefault());
-            }
+            Places.initialize(requireContext(), getApiKey(), Locale.getDefault());
         }
         placesClient = Places.createClient(requireContext());
 
         etOrigen = root.findViewById(R.id.etOrigen);
         etDestino = root.findViewById(R.id.etDestino);
         tvTiempo = root.findViewById(R.id.tvTiempo);
-        Button btnCalcularRuta = root.findViewById(R.id.btnCalcularRuta);
+        btnCalcularRuta = root.findViewById(R.id.btnCalcularRuta);
         Spinner spinnerModo = root.findViewById(R.id.spinnerModo);
+        Spinner spinnerIdiomas = root.findViewById(R.id.spinnerIdiomas);
 
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map);
         if (mapFragment != null) {
@@ -120,10 +106,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         setAutocomplete(etOrigen, true);
         setAutocomplete(etDestino, false);
 
-        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(requireContext(),
-                R.array.modos_transporte, android.R.layout.simple_spinner_item);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerModo.setAdapter(adapter);
+        ArrayAdapter<CharSequence> adapterModo = ArrayAdapter.createFromResource(requireContext(), R.array.modos_transporte, android.R.layout.simple_spinner_item);
+        adapterModo.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerModo.setAdapter(adapterModo);
         spinnerModo.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
@@ -137,26 +122,57 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             public void onNothingSelected(AdapterView<?> parent) {}
         });
 
-        btnCalcularRuta.setOnClickListener(v -> {
-            Log.d(TAG, "Botón 'Calcular Ruta' presionado.");
-            if (origenLatLng != null && destinoLatLng != null) {
-                Log.d(TAG, "Origen y Destino válidos. Procediendo a calcular.");
-                limpiarRutasYMarcadores();
+        ArrayAdapter<CharSequence> adapterIdioma = ArrayAdapter.createFromResource(requireContext(), R.array.idiomas_array, android.R.layout.simple_spinner_item);
+        adapterIdioma.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerIdiomas.setAdapter(adapterIdioma);
 
-                Marker origenMarker = mMap.addMarker(new MarkerOptions().position(origenLatLng).title("Origen"));
-                Marker destinoMarker = mMap.addMarker(new MarkerOptions().position(destinoLatLng).title("Destino"));
+        // Pre-select the spinner with the current language
+        String currentLang = Locale.getDefault().getLanguage();
+        if (currentLang.equals("en")) {
+            spinnerIdiomas.setSelection(1);
+        } else {
+            spinnerIdiomas.setSelection(0);
+        }
+
+        spinnerIdiomas.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                String lang = (position == 0) ? "es" : "en";
+                // Only trigger the change if the selected language is different
+                if (!Locale.getDefault().getLanguage().equals(lang)) {
+                    if (getActivity() instanceof ContenidoGeneral) {
+                        ((ContenidoGeneral) getActivity()).setLocale(lang);
+                    }
+                }
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        btnCalcularRuta.setOnClickListener(v -> {
+            if (origenLatLng != null && destinoLatLng != null) {
+                limpiarRutasYMarcadores();
+                Marker origenMarker = mMap.addMarker(new MarkerOptions().position(origenLatLng).title(getString(R.string.hint_origen)));
+                Marker destinoMarker = mMap.addMarker(new MarkerOptions().position(destinoLatLng).title(getString(R.string.hint_destino)));
                 markersActuales.add(origenMarker);
                 markersActuales.add(destinoMarker);
-
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(origenLatLng, 15));
                 calcularRutas(origenLatLng, destinoLatLng);
             } else {
-                Log.e(TAG, "Error: Origen o Destino son nulos.");
-                Toast.makeText(requireContext(), "Selecciona un origen y destino válidos de la lista", Toast.LENGTH_LONG).show();
+                Toast.makeText(requireContext(), getString(R.string.seleccion_valida), Toast.LENGTH_LONG).show();
             }
         });
 
+        actualizarTextosUI();
         return root;
+    }
+
+    private void actualizarTextosUI() {
+        etOrigen.setHint(getString(R.string.hint_origen));
+        etDestino.setHint(getString(R.string.hint_destino));
+        btnCalcularRuta.setText(getString(R.string.boton_calcular_ruta));
+        tvTiempo.setText(getString(R.string.tiempo_estimado_inicial));
+        idiomaSeleccionado = Locale.getDefault().getLanguage();
     }
 
     @Override
@@ -171,7 +187,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
         }
 
-        // --- 🔹 CAMBIO CLAVE: Hacer las rutas clickables ---
         mMap.setOnPolylineClickListener(polyline -> {
             if (polyline.getTag() != null) {
                 Toast.makeText(getContext(), polyline.getTag().toString(), Toast.LENGTH_LONG).show();
@@ -181,9 +196,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         cargarReportesDesdeFirestore();
 
         mMap.setOnMapClickListener(latLng -> {
-            String nombreLugar = "Ubicación desconocida";
+            String nombreLugar = getString(R.string.ubicacion_desconocida);
             try {
-                Geocoder geocoder = new Geocoder(requireContext(), Locale.getDefault());
+                Geocoder geocoder = new Geocoder(requireContext(), new Locale(idiomaSeleccionado));
                 List<Address> addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1);
                 if (addresses != null && !addresses.isEmpty()) {
                     nombreLugar = addresses.get(0).getAddressLine(0);
@@ -220,35 +235,26 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                         sugerencias.add(prediction.getFullText(null).toString());
                         placeIds.add(prediction.getPlaceId());
                     }
-
                     ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_dropdown_item_1line, sugerencias);
                     editText.setAdapter(adapter);
                     adapter.notifyDataSetChanged();
-
                     editText.setOnItemClickListener((parent, view, position, id) -> {
                         String placeId = placeIds.get(position);
                         List<Place.Field> fields = Arrays.asList(Place.Field.LAT_LNG, Place.Field.NAME);
                         FetchPlaceRequest placeRequest = FetchPlaceRequest.newInstance(placeId, fields);
-
                         placesClient.fetchPlace(placeRequest).addOnSuccessListener(fetchResponse -> {
                             Place place = fetchResponse.getPlace();
+                            String toastMessage;
                             if (esOrigen) {
                                 origenLatLng = place.getLatLng();
-                                Log.d(TAG, "Origen fijado: " + place.getName() + " -> " + origenLatLng);
-                                Toast.makeText(getContext(), "Origen fijado: " + place.getName(), Toast.LENGTH_SHORT).show();
+                                toastMessage = getString(R.string.origen_fijado, place.getName());
                             } else {
                                 destinoLatLng = place.getLatLng();
-                                Log.d(TAG, "Destino fijado: " + place.getName() + " -> " + destinoLatLng);
-                                Toast.makeText(getContext(), "Destino fijado: " + place.getName(), Toast.LENGTH_SHORT).show();
+                                toastMessage = getString(R.string.destino_fijado, place.getName());
                             }
-                        }).addOnFailureListener(e -> {
-                            Log.e(TAG, "Error al obtener detalles del lugar", e);
-                            Toast.makeText(getContext(), "Error al obtener lugar: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                            Toast.makeText(getContext(), toastMessage, Toast.LENGTH_SHORT).show();
                         });
                     });
-                }).addOnFailureListener(e -> {
-                    Log.e(TAG, "Error en autocompletado", e);
-                    Toast.makeText(getContext(), "Error de autocompletado: " + e.getMessage(), Toast.LENGTH_LONG).show();
                 });
             }
         });
@@ -256,30 +262,19 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     private void cargarReportesDesdeFirestore() {
         db.collection("reportes").addSnapshotListener((snapshots, e) -> {
-            if (e != null) {
-                Log.w(TAG, "Error al escuchar reportes de Firestore.", e);
-                return;
-            }
+            if (e != null) { return; }
             listaDeReportes.clear();
             for (QueryDocumentSnapshot doc : snapshots) {
                 listaDeReportes.add(doc.toObject(Reporte.class));
             }
-            Log.d(TAG, "Reportes cargados: " + listaDeReportes.size() + ". Redibujando en mapa.");
-            if (mMap != null) {
-                dibujarReportesEnMapa();
-            }
+            if (mMap != null) { dibujarReportesEnMapa(); }
         });
     }
 
     private void dibujarReportesEnMapa() {
         if (mMap == null) return;
-
-        for (Circle circle : circleReportesActuales) {
-            circle.remove();
-        }
+        for (Circle circle : circleReportesActuales) { circle.remove(); }
         circleReportesActuales.clear();
-
-        Log.d(TAG, "Dibujando " + listaDeReportes.size() + " reportes en el mapa.");
         for (Reporte reporte : listaDeReportes) {
             int color;
             switch (reporte.getRiesgo()) {
@@ -287,11 +282,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 case 2: color = Color.parseColor("#55FFA500"); break;
                 default: color = Color.parseColor("#55FF3333"); break;
             }
-            Circle circle = mMap.addCircle(new CircleOptions()
-                    .center(new LatLng(reporte.getLat(), reporte.getLng()))
-                    .radius(75)
-                    .strokeWidth(0)
-                    .fillColor(color));
+            Circle circle = mMap.addCircle(new CircleOptions().center(new LatLng(reporte.getLat(), reporte.getLng())).radius(75).strokeWidth(0).fillColor(color));
             circleReportesActuales.add(circle);
         }
     }
@@ -302,39 +293,25 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 "&destination=" + destino.latitude + "," + destino.longitude +
                 "&mode=" + modoTransporte +
                 "&alternatives=true" +
+                "&language=" + idiomaSeleccionado +
                 "&key=" + getApiKey();
 
-        Log.d(TAG, "URL de Directions API: " + url);
-
         RequestQueue queue = Volley.newRequestQueue(requireContext());
-        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, url, null,
-                response -> {
-                    Log.d(TAG, "Respuesta de Directions API: " + response.toString());
-                    procesarRespuestaDeRutas(response);
-                },
-                error -> {
-                    Log.e(TAG, "Error en la petición a Directions API", error);
-                    Toast.makeText(getContext(), "Error al obtener rutas: " + error.getMessage(), Toast.LENGTH_LONG).show();
-                }
-        );
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, url, null, this::procesarRespuestaDeRutas,
+                error -> Toast.makeText(getContext(), "Error: " + error.getMessage(), Toast.LENGTH_LONG).show());
         queue.add(request);
     }
 
     private void procesarRespuestaDeRutas(JSONObject response) {
         try {
-            String status = response.getString("status");
-            Log.d(TAG, "Estado de la respuesta: " + status);
-
-            if (!status.equals("OK")) {
-                String errorMsg = response.optString("error_message", "Causa desconocida.");
-                Toast.makeText(getContext(), "No se encontraron rutas. Estado: " + status + ". Razón: " + errorMsg, Toast.LENGTH_LONG).show();
+            if (!response.getString("status").equals("OK")) {
+                Toast.makeText(getContext(), getString(R.string.no_se_encontraron_rutas), Toast.LENGTH_SHORT).show();
                 return;
             }
 
             JSONArray routes = response.getJSONArray("routes");
-            Log.d(TAG, "Número de rutas encontradas: " + routes.length());
             if (routes.length() == 0) {
-                Toast.makeText(getContext(), "No se encontraron rutas.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), getString(R.string.no_se_encontraron_rutas), Toast.LENGTH_SHORT).show();
                 return;
             }
 
@@ -352,89 +329,71 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                     menorDistancia = distanciaActual;
                     rutaMasCortaIndex = i;
                 }
-
-                String polyline = route.getJSONObject("overview_polyline").getString("points");
-                List<LatLng> puntos = decodePolyline(polyline);
-                int puntajeRiesgo = 0;
-                for (LatLng punto : puntos) {
-                    for (Reporte reporte : listaDeReportes) {
-                        float[] distancia = new float[1];
-                        Location.distanceBetween(punto.latitude, punto.longitude, reporte.getLat(), reporte.getLng(), distancia);
-                        if (distancia[0] < 75) {
-                            if (reporte.getRiesgo() == 2) puntajeRiesgo += 1;
-                            if (reporte.getRiesgo() == 3) puntajeRiesgo += 5;
-                        }
-                    }
-                }
-                Log.d(TAG, "Ruta " + i + " - Puntaje de riesgo: " + puntajeRiesgo);
-
+                List<LatLng> puntos = decodePolyline(route.getJSONObject("overview_polyline").getString("points"));
+                int puntajeRiesgo = calcularPuntajeRiesgo(puntos);
                 if (puntajeRiesgo < mejorPuntajeRiesgo) {
                     mejorPuntajeRiesgo = puntajeRiesgo;
                     rutaMasSeguraIndex = i;
                 }
             }
 
-            Log.d(TAG, "Ruta más corta: índice " + rutaMasCortaIndex + ". Ruta más segura: índice " + rutaMasSeguraIndex);
-
             String tiempoRutaCorta = routes.getJSONObject(rutaMasCortaIndex).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getString("text");
             String tiempoRutaSegura = routes.getJSONObject(rutaMasSeguraIndex).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getString("text");
 
-            // --- 🔹 CAMBIO CLAVE: Lógica mejorada para mostrar las opciones ---
             if (rutaMasCortaIndex == rutaMasSeguraIndex) {
-                tvTiempo.setText("Ruta Óptima (corta y segura): " + tiempoRutaCorta);
+                tvTiempo.setText(getString(R.string.ruta_optima, tiempoRutaCorta));
                 String polyline = routes.getJSONObject(rutaMasCortaIndex).getJSONObject("overview_polyline").getString("points");
-                String tagUnica = "Ruta Óptima: " + tiempoRutaCorta + " (Riesgo: " + mejorPuntajeRiesgo + ")";
+                String tagUnica = getString(R.string.tag_ruta_optima, tiempoRutaCorta, mejorPuntajeRiesgo);
                 dibujarRuta(decodePolyline(polyline), Color.GREEN, 20, tagUnica);
             } else {
-                tvTiempo.setText("Comparando Rutas | Azul: Más Corta (" + tiempoRutaCorta + ") | Verde: Más Segura (" + tiempoRutaSegura + ")");
-
+                tvTiempo.setText(getString(R.string.comparando_rutas, tiempoRutaCorta, tiempoRutaSegura));
                 String polylineCorta = routes.getJSONObject(rutaMasCortaIndex).getJSONObject("overview_polyline").getString("points");
-                String tagCorta = "Ruta más corta: " + tiempoRutaCorta;
-                dibujarRuta(decodePolyline(polylineCorta), Color.BLUE, 15, tagCorta);
-
+                int puntajeRiesgoCorta = calcularPuntajeRiesgo(decodePolyline(polylineCorta));
+                String tagCorta = getString(R.string.tag_ruta_corta, tiempoRutaCorta, puntajeRiesgoCorta);
+                dibujarRuta(decodePolyline(polylineCorta), Color.BLUE, 22, tagCorta);
                 String polylineSegura = routes.getJSONObject(rutaMasSeguraIndex).getJSONObject("overview_polyline").getString("points");
-                String tagSegura = "Ruta más segura: " + tiempoRutaSegura + " (Riesgo: " + mejorPuntajeRiesgo + ")";
-                dibujarRuta(decodePolyline(polylineSegura), Color.GREEN, 20, tagSegura);
+                String tagSegura = getString(R.string.tag_ruta_segura, tiempoRutaSegura, mejorPuntajeRiesgo);
+                dibujarRuta(decodePolyline(polylineSegura), Color.GREEN, 15, tagSegura);
             }
-
         } catch (Exception e) {
-            Log.e(TAG, "Error al procesar la respuesta de las rutas", e);
             Toast.makeText(getContext(), "Error procesando las rutas", Toast.LENGTH_SHORT).show();
         }
     }
 
+    private int calcularPuntajeRiesgo(List<LatLng> puntos) {
+        int puntajeRiesgo = 0;
+        for (LatLng punto : puntos) {
+            for (Reporte reporte : listaDeReportes) {
+                float[] distancia = new float[1];
+                Location.distanceBetween(punto.latitude, punto.longitude, reporte.getLat(), reporte.getLng(), distancia);
+                if (distancia[0] < 75) {
+                    if (reporte.getRiesgo() == 2) puntajeRiesgo += 1;
+                    if (reporte.getRiesgo() == 3) puntajeRiesgo += 5;
+                }
+            }
+        }
+        return puntajeRiesgo;
+    }
+
     private void dibujarRuta(List<LatLng> puntos, int color, float ancho, String tag) {
         if (mMap == null) return;
-        Log.d(TAG, "Dibujando ruta con tag: " + tag);
-        Polyline polyline = mMap.addPolyline(new PolylineOptions()
-                .addAll(puntos)
-                .color(color)
-                .width(ancho)
-                .clickable(true)); // Hacemos la ruta clickable
-        polyline.setTag(tag); // Guardamos la información en la ruta
+        Polyline polyline = mMap.addPolyline(new PolylineOptions().addAll(puntos).color(color).width(ancho).clickable(true));
+        polyline.setTag(tag);
         polylinesActuales.add(polyline);
     }
 
     private void limpiarRutasYMarcadores() {
         if (mMap == null) return;
-        for (Polyline polyline : polylinesActuales) {
-            polyline.remove();
-        }
+        for (Polyline polyline : polylinesActuales) { polyline.remove(); }
         polylinesActuales.clear();
-
-        for (Marker marker : markersActuales) {
-            marker.remove();
-        }
+        for (Marker marker : markersActuales) { marker.remove(); }
         markersActuales.clear();
     }
 
     private String getApiKey() {
         try {
             return requireActivity().getPackageManager().getApplicationInfo(requireActivity().getPackageName(), PackageManager.GET_META_DATA).metaData.getString("com.google.android.geo.API_KEY");
-        } catch (Exception e) {
-            Log.e("ApiKey", "No se pudo leer la API Key del Manifest", e);
-            return "";
-        }
+        } catch (Exception e) { return ""; }
     }
 
     private List<LatLng> decodePolyline(String encoded) {
@@ -443,20 +402,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         int lat = 0, lng = 0;
         while (index < len) {
             int b, shift = 0, result = 0;
-            do {
-                b = encoded.charAt(index++) - 63;
-                result |= (b & 0x1f) << shift;
-                shift += 5;
-            } while (b >= 0x20);
+            do { b = encoded.charAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
             int dlat = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
             lat += dlat;
-            shift = 0;
-            result = 0;
-            do {
-                b = encoded.charAt(index++) - 63;
-                result |= (b & 0x1f) << shift;
-                shift += 5;
-            } while (b >= 0x20);
+            shift = 0; result = 0;
+            do { b = encoded.charAt(index++) - 63; result |= (b & 0x1f) << shift; shift += 5; } while (b >= 0x20);
             int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
             lng += dlng;
             LatLng p = new LatLng((((double) lat / 1E5)), (((double) lng / 1E5)));
@@ -465,3 +415,4 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         return poly;
     }
 }
+

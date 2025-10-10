@@ -1,0 +1,42 @@
+<resources>
+    <string name="app_name">SafeRoute</string>
+    <string name="title_activity_contenido_general">SafeRoute</string>
+    <string name="navigation_drawer_open">Open navigation drawer</string>
+    <string name="navigation_drawer_close">Close navigation drawer</string>
+    <string name="nav_header_title">SafeRoute</string>
+    <string name="nav_header_subtitle">your.email@android.com</string>
+    <string name="nav_header_desc">Navigation header</string>
+    <string name="action_settings">Settings</string>
+
+    <string name="menu_home">Map</string>
+    <string name="menu_gallery">Report</string>
+    <string name="menu_slideshow">My Reports</string>
+
+    <!-- Texts for HomeFragment -->
+    <string name="hint_origen">Origin Point</string>
+    <string name="hint_destino">Destination Point</string>
+    <string name="boton_calcular_ruta">Calculate Route</string>
+    <string name="tiempo_estimado_inicial">Estimated time:</string>
+    <string name="seleccion_valida">Select a valid origin and destination</string>
+    <string name="origen_fijado">Origin set: %1$s</string>
+    <string name="destino_fijado">Destination set: %1$s</string>
+    <string name="comparando_rutas">Comparing | Blue: Shortest (%1$s) | Green: Safest (%2$s)</string>
+    <string name="ruta_optima">Optimal Route (short and safe): %1$s</string>
+    <string name="tag_ruta_corta">Shortest route: %1$s (Risk: %2$d)</string>
+    <string name="tag_ruta_segura">Safest route: %1$s (Risk: %2$d)</string>
+    <string name="tag_ruta_optima">Optimal Route: %1$s (Risk: %2$d)</string>
+    <string name="no_se_encontraron_rutas">No routes were found.</string>
+    <string name="ubicacion_desconocida">Unknown Location</string>
+
+    <string-array name="modos_transporte">
+        <item>Driving</item>
+        <item>Walking</item>
+        <item>Bicycling</item>
+    </string-array>
+
+    <string-array name="idiomas_array">
+        <item>Español</item>
+        <item>English</item>
+    </string-array>
+</resources>
+

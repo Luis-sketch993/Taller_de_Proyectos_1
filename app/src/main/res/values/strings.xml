@@ -1,22 +1,42 @@
 <resources>
-    <string name="app_name">My Applicationf</string>
-    <string name="title_activity_maps">MapsActivity</string>
-    <string name="title_activity_contenido_general">ContenidoGeneral</string>
-    <string name="navigation_drawer_open">Open navigation drawer</string>
-    <string name="navigation_drawer_close">Close navigation drawer</string>
-    <string name="nav_header_title">Android Studio</string>
-    <string name="nav_header_subtitle">android.studio@android.com</string>
-    <string name="nav_header_desc">Navigation header</string>
-    <string name="action_settings">Settings</string>
+    <string name="app_name">SafeRoute</string>
+    <string name="title_activity_contenido_general">SafeRoute</string>
+    <string name="navigation_drawer_open">Abrir menú de navegación</string>
+    <string name="navigation_drawer_close">Cerrar menú de navegación</string>
+    <string name="nav_header_title">SafeRoute</string>
+    <string name="nav_header_subtitle">tu.email@android.com</string>
+    <string name="nav_header_desc">Encabezado de navegación</string>
+    <string name="action_settings">Ajustes</string>
 
-    <string name="menu_home">Home</string>
-    <string name="menu_gallery">Gallery</string>
-    <string name="menu_slideshow">Slideshow</string>
+    <string name="menu_home">Mapa</string>
+    <string name="menu_gallery">Reportar</string>
+    <string name="menu_slideshow">Mis Reportes</string>
 
-    <!-- 🔹 AÑADIDO: Array para los modos de transporte que soluciona el error -->
+    <!-- Textos para HomeFragment -->
+    <string name="hint_origen">Punto de Origen</string>
+    <string name="hint_destino">Punto de Destino</string>
+    <string name="boton_calcular_ruta">Calcular Ruta</string>
+    <string name="tiempo_estimado_inicial">Tiempo estimado:</string>
+    <string name="seleccion_valida">Selecciona un origen y destino válidos</string>
+    <string name="origen_fijado">Origen fijado: %1$s</string>
+    <string name="destino_fijado">Destino fijado: %1$s</string>
+    <string name="comparando_rutas">Comparando | Azul: Corta (%1$s) | Verde: Segura (%2$s)</string>
+    <string name="ruta_optima">Ruta Óptima (corta y segura): %1$s</string>
+    <string name="tag_ruta_corta">Ruta más corta: %1$s (Riesgo: %2$d)</string>
+    <string name="tag_ruta_segura">Ruta más segura: %1$s (Riesgo: %2$d)</string>
+    <string name="tag_ruta_optima">Ruta Óptima: %1$s (Riesgo: %2$d)</string>
+    <string name="no_se_encontraron_rutas">No se encontraron rutas.</string>
+    <string name="ubicacion_desconocida">Ubicación desconocida</string>
+
     <string-array name="modos_transporte">
+        <item>Carro</item>
         <item>A pie</item>
         <item>Bicicleta</item>
-        <item>Carro</item>
+    </string-array>
+
+    <string-array name="idiomas_array">
+        <item>Español</item>
+        <item>English</item>
     </string-array>
 </resources>
+

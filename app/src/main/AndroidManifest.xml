@@ -31,16 +31,7 @@
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAbiXfffKiKJMOIfeD4A2RQaPq_Vuq4Vec" /> <!-- Si ya migraste el mapa al HomeFragment, esta Activity sobra -->
-        <activity
-            android:name=".MapsActivity"
-            android:exported="false"
-            android:label="@string/title_activity_maps" />
-        <activity
-            android:name=".MainActivity3"
-            android:exported="false" />
-        <activity
-            android:name=".MainActivity2"
-            android:exported="false" /> <!-- Activity de Login -->
+
         <activity
             android:name=".MainActivity"
             android:exported="true">

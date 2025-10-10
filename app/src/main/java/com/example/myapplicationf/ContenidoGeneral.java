@@ -1,10 +1,12 @@
 package com.example.myapplicationf;
 
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.os.Bundle;
-import android.view.View;
 import android.view.Menu;
 
-import com.google.android.material.snackbar.Snackbar;
 import com.google.android.material.navigation.NavigationView;
 
 import androidx.navigation.NavController;
@@ -16,10 +18,30 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.myapplicationf.databinding.ActivityContenidoGeneralBinding;
 
+import java.util.Locale;
+
 public class ContenidoGeneral extends AppCompatActivity {
 
     private AppBarConfiguration mAppBarConfiguration;
     private ActivityContenidoGeneralBinding binding;
+
+    // This method applies the locale before the Activity is created.
+    @Override
+    protected void attachBaseContext(Context newBase) {
+        SharedPreferences prefs = newBase.getSharedPreferences("Settings", MODE_PRIVATE);
+        String language = prefs.getString("My_Lang", Locale.getDefault().getLanguage());
+        super.attachBaseContext(updateBaseContextLocale(newBase, language));
+    }
+
+    private Context updateBaseContextLocale(Context context, String language) {
+        Locale locale = new Locale(language);
+        Locale.setDefault(locale);
+
+        Configuration config = new Configuration(context.getResources().getConfiguration());
+        config.setLocale(locale);
+        return context.createConfigurationContext(config);
+    }
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -29,18 +51,10 @@ public class ContenidoGeneral extends AppCompatActivity {
         setContentView(binding.getRoot());
 
         setSupportActionBar(binding.appBarContenidoGeneral.toolbar);
-        binding.appBarContenidoGeneral.fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null)
-                        .setAnchorView(R.id.fab).show();
-            }
-        });
+
         DrawerLayout drawer = binding.drawerLayout;
         NavigationView navigationView = binding.navView;
-        // Passing each menu ID as a set of Ids because each
-        // menu should be considered as top level destinations.
+
         mAppBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.nav_home, R.id.nav_gallery, R.id.nav_slideshow)
                 .setOpenableLayout(drawer)
@@ -50,9 +64,17 @@ public class ContenidoGeneral extends AppCompatActivity {
         NavigationUI.setupWithNavController(navigationView, navController);
     }
 
+    // This method saves the selected language and restarts the activity to apply changes.
+    public void setLocale(String lang) {
+        SharedPreferences.Editor editor = getSharedPreferences("Settings", MODE_PRIVATE).edit();
+        editor.putString("My_Lang", lang);
+        editor.apply();
+
+        recreate();
+    }
+
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
         getMenuInflater().inflate(R.menu.contenido_general, menu);
         return true;
     }
@@ -64,3 +86,4 @@ public class ContenidoGeneral extends AppCompatActivity {
                 || super.onSupportNavigateUp();
     }
 }
+
