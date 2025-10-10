@@ -18,7 +18,6 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Button;
-import android.widget.FrameLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -33,10 +32,8 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
-import com.example.myapplicationf.Models.Alertas;
 import com.example.myapplicationf.Models.Reporte;
 import com.example.myapplicationf.R;
-import com.example.myapplicationf.Utils.NotificacionHelper;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -59,308 +56,359 @@ import com.google.android.libraries.places.api.net.FetchPlaceRequest;
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest;
 import com.google.android.libraries.places.api.net.PlacesClient;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
+    private static final String TAG = "RutaSeguraDebug";
+
     private GoogleMap mMap;
     private FirebaseFirestore db;
-    private FusedLocationProviderClient fusedLocationClient;
-    private LocationCallback locationCallback;
+    private FusedLocationProviderClient fusedLocationProviderClient;
     private PlacesClient placesClient;
 
-    // --- 🔹 NUEVAS VARIABLES PARA RUTAS MÚLTIPLES ---
-    private List<Reporte> listaDeReportes = new ArrayList<>();
-    private List<Polyline> polylinesEnMapa = new ArrayList<>();
-    private static final double RADIO_DE_RIESGO = 75; // en metros
-
-    // --- Variables de UI y de estado ---
     private AutoCompleteTextView etOrigen, etDestino;
-    private TextView tvTiempo;
     private LatLng origenLatLng, destinoLatLng;
-    private String modoTransporte = "walking";
-    private String idiomaSeleccionado = "es";
+    private List<Reporte> listaDeReportes = new ArrayList<>();
+    private List<Polyline> polylinesActuales = new ArrayList<>();
+    private TextView tvTiempo;
+
+    private String modoTransporte = "driving";
 
     @Override
-    public View onCreateView(@NonNull LayoutInflater inflater,
-                             ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_home, container, false);
 
         db = FirebaseFirestore.getInstance();
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
-        NotificacionHelper.crearCanal(requireContext());
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(requireActivity());
 
-        // Inicializar Places (usando la API Key del Manifest)
         if (!Places.isInitialized()) {
-            Places.initialize(requireContext(), getApiKeyFromManifest());
+            String apiKey = getApiKey();
+            if (apiKey.isEmpty()) {
+                Toast.makeText(getContext(), "API Key de Google Maps no encontrada.", Toast.LENGTH_LONG).show();
+            } else {
+                Places.initialize(requireContext(), apiKey, Locale.getDefault());
+            }
         }
         placesClient = Places.createClient(requireContext());
 
-        // Configuración de Vistas
-        inicializarVistas(root);
-        prepararActualizacionUbicacion();
+        etOrigen = root.findViewById(R.id.etOrigen);
+        etDestino = root.findViewById(R.id.etDestino);
+        tvTiempo = root.findViewById(R.id.tvTiempo);
+        Button btnCalcularRuta = root.findViewById(R.id.btnCalcularRuta);
+        Spinner spinnerModo = root.findViewById(R.id.spinnerModo);
 
-        SupportMapFragment mapFragment = (SupportMapFragment)
-                getChildFragmentManager().findFragmentById(R.id.map);
+        SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
 
-        return root;
-    }
-
-    private void inicializarVistas(View root) {
-        tvTiempo = root.findViewById(R.id.tvTiempo);
-        etOrigen = root.findViewById(R.id.etOrigen);
-        etDestino = root.findViewById(R.id.etDestino);
-        Button btnCalcularRuta = root.findViewById(R.id.btnCalcularRuta);
-
         setAutocomplete(etOrigen, true);
         setAutocomplete(etDestino, false);
 
-        // Configuración de Spinners (Modo, Filtro, Idioma)
-        setupSpinners(root);
+        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(requireContext(),
+                R.array.modos_transporte, android.R.layout.simple_spinner_item);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerModo.setAdapter(adapter);
+        spinnerModo.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                switch (position) {
+                    case 0: modoTransporte = "driving"; break;
+                    case 1: modoTransporte = "walking"; break;
+                    case 2: modoTransporte = "bicycling"; break;
+                }
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {}
+        });
 
         btnCalcularRuta.setOnClickListener(v -> {
+            Log.d(TAG, "Botón 'Calcular Ruta' presionado.");
             if (origenLatLng != null && destinoLatLng != null) {
-                mMap.clear(); // Limpia todo (marcadores, círculos, polylines)
-                dibujarZonasDeRiesgo(); // Vuelve a dibujar los círculos de riesgo
-                calcularRutas();
+                Log.d(TAG, "Origen y Destino válidos. Procediendo a calcular.");
+                limpiarMapa();
+
+                // --- 🔹 CAMBIO CLAVE: Volver a dibujar los reportes después de limpiar ---
+                dibujarReportesEnMapa();
+
+                mMap.addMarker(new MarkerOptions().position(origenLatLng).title("Origen"));
+                mMap.addMarker(new MarkerOptions().position(destinoLatLng).title("Destino"));
+                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(origenLatLng, 15));
+                calcularRutas(origenLatLng, destinoLatLng);
             } else {
-                Toast.makeText(requireContext(), "Selecciona origen y destino válidos", Toast.LENGTH_SHORT).show();
+                Log.e(TAG, "Error: Origen o Destino son nulos.");
+                Toast.makeText(requireContext(), "Selecciona un origen y destino válidos de la lista", Toast.LENGTH_LONG).show();
             }
         });
+
+        return root;
     }
 
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
         LatLng cusco = new LatLng(-13.53195, -71.967463);
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(cusco, 15));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(cusco, 13));
 
-        // Listener para reportar (al hacer click en el mapa)
-        mMap.setOnMapClickListener(this::abrirFormularioDeReporte);
+        if (ActivityCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            mMap.setMyLocationEnabled(true);
+        } else {
+            ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+        }
 
-        // 🔹 Carga inicial de los reportes para el análisis de rutas
         cargarReportesDesdeFirestore();
-    }
 
-    /**
-     * 🔹 PASO 1: Cargar todos los reportes de Firestore y guardarlos en una lista local.
-     * Se usa addSnapshotListener para que la lista siempre esté actualizada en tiempo real.
-     */
-    private void cargarReportesDesdeFirestore() {
-        db.collection("reportes").addSnapshotListener((snapshots, e) -> {
-            if (e != null) {
-                Log.w("Firestore", "Error al escuchar.", e);
-                return;
-            }
-            if (snapshots == null) return;
-
-            listaDeReportes.clear();
-            for (var doc : snapshots.getDocuments()) {
-                Reporte reporte = doc.toObject(Reporte.class);
-                if (reporte != null) {
-                    listaDeReportes.add(reporte);
+        mMap.setOnMapClickListener(latLng -> {
+            String nombreLugar = "Ubicación desconocida";
+            try {
+                Geocoder geocoder = new Geocoder(requireContext(), Locale.getDefault());
+                List<Address> addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1);
+                if (addresses != null && !addresses.isEmpty()) {
+                    nombreLugar = addresses.get(0).getAddressLine(0);
                 }
-            }
-            Log.d("Firestore", "Lista de reportes actualizada. Total: " + listaDeReportes.size());
-            // Una vez cargados, dibujamos las zonas en el mapa
-            dibujarZonasDeRiesgo();
+            } catch (Exception e) { e.printStackTrace(); }
+
+            Bundle bundle = new Bundle();
+            bundle.putDouble("lat", latLng.latitude);
+            bundle.putDouble("lng", latLng.longitude);
+            bundle.putString("nombreLugar", nombreLugar);
+
+            NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment_content_contenido_general);
+            navController.navigate(R.id.nav_gallery, bundle);
         });
     }
 
-    /**
-     * Dibuja los círculos de riesgo en el mapa basándose en la lista local de reportes.
-     */
-    private void dibujarZonasDeRiesgo() {
-        if (mMap == null) return;
-        // No limpiamos el mapa aquí para no borrar las rutas calculadas
+    private void setAutocomplete(AutoCompleteTextView editText, boolean esOrigen) {
+        editText.setThreshold(1);
+        editText.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void afterTextChanged(Editable s) {}
 
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+                if (s.toString().isEmpty()) return;
+
+                FindAutocompletePredictionsRequest request = FindAutocompletePredictionsRequest.builder()
+                        .setQuery(s.toString()).setSessionToken(AutocompleteSessionToken.newInstance()).setCountries("PE").build();
+
+                placesClient.findAutocompletePredictions(request).addOnSuccessListener(response -> {
+                    List<String> sugerencias = new ArrayList<>();
+                    List<String> placeIds = new ArrayList<>();
+                    for (AutocompletePrediction prediction : response.getAutocompletePredictions()) {
+                        sugerencias.add(prediction.getFullText(null).toString());
+                        placeIds.add(prediction.getPlaceId());
+                    }
+
+                    ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_dropdown_item_1line, sugerencias);
+                    editText.setAdapter(adapter);
+                    adapter.notifyDataSetChanged();
+
+                    editText.setOnItemClickListener((parent, view, position, id) -> {
+                        String placeId = placeIds.get(position);
+                        List<Place.Field> fields = Arrays.asList(Place.Field.LAT_LNG, Place.Field.NAME);
+                        FetchPlaceRequest placeRequest = FetchPlaceRequest.newInstance(placeId, fields);
+
+                        placesClient.fetchPlace(placeRequest).addOnSuccessListener(fetchResponse -> {
+                            Place place = fetchResponse.getPlace();
+                            if (esOrigen) {
+                                origenLatLng = place.getLatLng();
+                                Log.d(TAG, "Origen fijado: " + place.getName() + " -> " + origenLatLng);
+                                Toast.makeText(getContext(), "Origen fijado: " + place.getName(), Toast.LENGTH_SHORT).show();
+                            } else {
+                                destinoLatLng = place.getLatLng();
+                                Log.d(TAG, "Destino fijado: " + place.getName() + " -> " + destinoLatLng);
+                                Toast.makeText(getContext(), "Destino fijado: " + place.getName(), Toast.LENGTH_SHORT).show();
+                            }
+                        }).addOnFailureListener(e -> {
+                            Log.e(TAG, "Error al obtener detalles del lugar", e);
+                            Toast.makeText(getContext(), "Error al obtener lugar: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        });
+                    });
+                }).addOnFailureListener(e -> {
+                    Log.e(TAG, "Error en autocompletado", e);
+                    Toast.makeText(getContext(), "Error de autocompletado: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                });
+            }
+        });
+    }
+
+    private void cargarReportesDesdeFirestore() {
+        db.collection("reportes").addSnapshotListener((snapshots, e) -> {
+            if (e != null) {
+                Log.w(TAG, "Error al escuchar reportes de Firestore.", e);
+                return;
+            }
+            listaDeReportes.clear();
+            for (QueryDocumentSnapshot doc : snapshots) {
+                listaDeReportes.add(doc.toObject(Reporte.class));
+            }
+            Log.d(TAG, "Reportes cargados: " + listaDeReportes.size() + ". Redibujando en mapa.");
+            // --- 🔹 CAMBIO CLAVE: Dibujar los reportes cada vez que se actualizan de Firestore ---
+            if (mMap != null) {
+                dibujarReportesEnMapa();
+            }
+        });
+    }
+
+    // --- 🔹 MÉTODO RESTAURADO: Para dibujar las zonas de reporte ---
+    private void dibujarReportesEnMapa() {
+        if (mMap == null) return;
+
+        // Limpiamos el mapa, pero guardamos las rutas para volver a dibujarlas
+        mMap.clear();
+
+        Log.d(TAG, "Dibujando " + listaDeReportes.size() + " reportes en el mapa.");
         for (Reporte reporte : listaDeReportes) {
             int color;
             switch (reporte.getRiesgo()) {
-                case 1: color = Color.parseColor("#4400FF00"); break; // Verde (Seguro)
-                case 2: color = Color.parseColor("#44FFD700"); break; // Amarillo (Moderado)
-                default: color = Color.parseColor("#44FF0000"); break; // Rojo (Inseguro)
+                case 1: color = Color.parseColor("#5533FF33"); break; // Verde translúcido
+                case 2: color = Color.parseColor("#55FFA500"); break; // Naranja translúcido
+                default: color = Color.parseColor("#55FF3333"); break; // Rojo translúcido
             }
-
-            LatLng posicion = new LatLng(reporte.getLat(), reporte.getLng());
             mMap.addCircle(new CircleOptions()
-                    .center(posicion)
-                    .radius(RADIO_DE_RIESGO) // Radio definido globalmente
-                    .strokeColor(Color.TRANSPARENT)
-                    .fillColor(color)
-            );
+                    .center(new LatLng(reporte.getLat(), reporte.getLng()))
+                    .radius(75)
+                    .strokeWidth(0)
+                    .fillColor(color));
         }
     }
 
-
-    /**
-     * 🔹 PASO 2: Solicitar a la API de Google TODAS las rutas alternativas.
-     */
-    private void calcularRutas() {
-        limpiarPolylines();
-        mMap.addMarker(new MarkerOptions().position(origenLatLng).title("Origen"));
-        mMap.addMarker(new MarkerOptions().position(destinoLatLng).title("Destino"));
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(origenLatLng, 14));
-
+    private void calcularRutas(LatLng origen, LatLng destino) {
         String url = "https://maps.googleapis.com/maps/api/directions/json?" +
-                "origin=" + origenLatLng.latitude + "," + origenLatLng.longitude +
-                "&destination=" + destinoLatLng.latitude + "," + destinoLatLng.longitude +
+                "origin=" + origen.latitude + "," + origen.longitude +
+                "&destination=" + destino.latitude + "," + destino.longitude +
                 "&mode=" + modoTransporte +
-                "&alternatives=true" +  // ¡La clave! Pedimos rutas alternativas.
-                "&language=" + idiomaSeleccionado +
-                "&key=" + getApiKeyFromManifest();
+                "&alternatives=true" +
+                "&key=" + getApiKey();
+
+        Log.d(TAG, "URL de Directions API: " + url);
 
         RequestQueue queue = Volley.newRequestQueue(requireContext());
         JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, url, null,
-                this::procesarRespuestaDeRutas,
+                response -> {
+                    Log.d(TAG, "Respuesta de Directions API: " + response.toString());
+                    procesarRespuestaDeRutas(response);
+                },
                 error -> {
-                    error.printStackTrace();
-                    tvTiempo.setText("Error al obtener rutas.");
+                    Log.e(TAG, "Error en la petición a Directions API", error);
+                    Toast.makeText(getContext(), "Error al obtener rutas: " + error.getMessage(), Toast.LENGTH_LONG).show();
                 }
         );
         queue.add(request);
     }
 
-    /**
-     * 🔹 PASO 3: Procesar TODAS las rutas, calcular su puntaje de riesgo y dibujarlas.
-     */
     private void procesarRespuestaDeRutas(JSONObject response) {
         try {
-            JSONArray routes = response.getJSONArray("routes");
-            if (routes.length() == 0) {
-                tvTiempo.setText("No se encontraron rutas.");
+            String status = response.getString("status");
+            Log.d(TAG, "Estado de la respuesta: " + status);
+
+            if (!status.equals("OK")) {
+                // --- 🔹 CAMBIO CLAVE: Mostrar el mensaje de error de Google ---
+                String errorMsg = response.optString("error_message", "Causa desconocida.");
+                Toast.makeText(getContext(), "No se encontraron rutas. Estado: " + status + ". Razón: " + errorMsg, Toast.LENGTH_LONG).show();
                 return;
             }
 
-            List<RutaAnalizada> rutasAnalizadas = new ArrayList<>();
+            JSONArray routes = response.getJSONArray("routes");
+            Log.d(TAG, "Número de rutas encontradas: " + routes.length());
+            if (routes.length() == 0) {
+                Toast.makeText(getContext(), "No se encontraron rutas.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            int mejorPuntajeRiesgo = Integer.MAX_VALUE;
+            int rutaMasSeguraIndex = -1;
+            int rutaMasCortaIndex = 0;
+            long menorDistancia = Long.MAX_VALUE;
 
             for (int i = 0; i < routes.length(); i++) {
                 JSONObject route = routes.getJSONObject(i);
                 JSONObject leg = route.getJSONArray("legs").getJSONObject(0);
+                long distanciaActual = leg.getJSONObject("distance").getLong("value");
 
-                String duration = leg.getJSONObject("duration").getString("text");
-                int distance = leg.getJSONObject("distance").getInt("value"); // en metros
-                String polylineEncoded = route.getJSONObject("overview_polyline").getString("points");
-                List<LatLng> puntosDeRuta = decodePolyline(polylineEncoded);
+                if (distanciaActual < menorDistancia) {
+                    menorDistancia = distanciaActual;
+                    rutaMasCortaIndex = i;
+                }
 
-                int puntajeDeRiesgo = calcularPuntajeDeRiesgo(puntosDeRuta);
-
-                rutasAnalizadas.add(new RutaAnalizada(puntosDeRuta, duration, distance, puntajeDeRiesgo));
-            }
-
-            // Ordenar para encontrar la más corta y la más segura
-            RutaAnalizada rutaMasCorta = Collections.min(rutasAnalizadas, Comparator.comparingInt(r -> r.distancia));
-            RutaAnalizada rutaMasSegura = Collections.min(rutasAnalizadas, Comparator.comparingInt(r -> r.puntajeRiesgo));
-
-            // Dibujar las rutas en el mapa
-            dibujarRuta(rutaMasSegura, Color.GREEN, 15f); // Verde y más gruesa para la segura
-            dibujarRuta(rutaMasCorta, Color.BLUE, 10f);   // Azul y más delgada para la corta
-
-            // Actualizar UI
-            String infoRutas = "Ruta Corta: " + rutaMasCorta.duracion + "\nRuta Segura: " + rutaMasSegura.duracion;
-            tvTiempo.setText(infoRutas);
-
-            if (rutaMasCorta.equals(rutaMasSegura)) {
-                tvTiempo.setText("La ruta más corta también es la más segura: " + rutaMasCorta.duracion);
-                // Si son la misma, dibujamos solo una vez (en verde)
-                limpiarPolylines();
-                dibujarRuta(rutaMasSegura, Color.GREEN, 15f);
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            tvTiempo.setText("Error procesando las rutas.");
-        }
-    }
-
-    /**
-     * 🔹 PASO 4: El núcleo de la lógica. Calcula un puntaje de riesgo para una ruta.
-     * A mayor puntaje, más peligrosa es la ruta.
-     */
-    private int calcularPuntajeDeRiesgo(List<LatLng> puntosDeRuta) {
-        int puntajeTotal = 0;
-        if (listaDeReportes.isEmpty()) {
-            return 0; // Si no hay reportes, todas las rutas son seguras.
-        }
-
-        for (LatLng punto : puntosDeRuta) {
-            for (Reporte reporte : listaDeReportes) {
-                LatLng puntoReporte = new LatLng(reporte.getLat(), reporte.getLng());
-                float[] distancia = new float[1];
-                Location.distanceBetween(punto.latitude, punto.longitude, puntoReporte.latitude, puntoReporte.longitude, distancia);
-
-                if (distancia[0] < RADIO_DE_RIESGO) {
-                    // El punto de la ruta está dentro de una zona de riesgo
-                    switch (reporte.getRiesgo()) {
-                        case 2: puntajeTotal += 1; break; // Penalización por riesgo moderado
-                        case 3: puntajeTotal += 5; break; // Penalización mayor por riesgo alto
+                String polyline = route.getJSONObject("overview_polyline").getString("points");
+                List<LatLng> puntos = decodePolyline(polyline);
+                int puntajeRiesgo = 0;
+                for (LatLng punto : puntos) {
+                    for (Reporte reporte : listaDeReportes) {
+                        float[] distancia = new float[1];
+                        Location.distanceBetween(punto.latitude, punto.longitude, reporte.getLat(), reporte.getLng(), distancia);
+                        if (distancia[0] < 75) {
+                            if (reporte.getRiesgo() == 2) puntajeRiesgo += 1;
+                            if (reporte.getRiesgo() == 3) puntajeRiesgo += 5;
+                        }
                     }
                 }
+                Log.d(TAG, "Ruta " + i + " - Puntaje de riesgo: " + puntajeRiesgo);
+
+                if (puntajeRiesgo < mejorPuntajeRiesgo) {
+                    mejorPuntajeRiesgo = puntajeRiesgo;
+                    rutaMasSeguraIndex = i;
+                }
             }
+
+            Log.d(TAG, "Ruta más corta: índice " + rutaMasCortaIndex + ". Ruta más segura: índice " + rutaMasSeguraIndex);
+
+            String tiempoRutaCorta = routes.getJSONObject(rutaMasCortaIndex).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getString("text");
+            String tiempoRutaSegura = routes.getJSONObject(rutaMasSeguraIndex).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getString("text");
+
+            if (rutaMasCortaIndex == rutaMasSeguraIndex) {
+                tvTiempo.setText("Ruta más corta y segura: " + tiempoRutaCorta);
+                String polyline = routes.getJSONObject(rutaMasCortaIndex).getJSONObject("overview_polyline").getString("points");
+                dibujarRuta(decodePolyline(polyline), Color.GREEN, 20);
+            } else {
+                tvTiempo.setText("Ruta corta: " + tiempoRutaCorta + " | Ruta segura: " + tiempoRutaSegura);
+                String polylineCorta = routes.getJSONObject(rutaMasCortaIndex).getJSONObject("overview_polyline").getString("points");
+                dibujarRuta(decodePolyline(polylineCorta), Color.BLUE, 15);
+                String polylineSegura = routes.getJSONObject(rutaMasSeguraIndex).getJSONObject("overview_polyline").getString("points");
+                dibujarRuta(decodePolyline(polylineSegura), Color.GREEN, 20);
+            }
+
+        } catch (Exception e) {
+            Log.e(TAG, "Error al procesar la respuesta de las rutas", e);
+            Toast.makeText(getContext(), "Error procesando las rutas", Toast.LENGTH_SHORT).show();
         }
-        return puntajeTotal;
     }
 
-    private void dibujarRuta(RutaAnalizada ruta, int color, float width) {
+    private void dibujarRuta(List<LatLng> puntos, int color, float ancho) {
+        if (mMap == null) return;
+        Log.d(TAG, "Dibujando ruta con " + puntos.size() + " puntos, color " + color);
         Polyline polyline = mMap.addPolyline(new PolylineOptions()
-                .addAll(ruta.puntos)
+                .addAll(puntos)
                 .color(color)
-                .width(width)
-                .clickable(true));
-        polylinesEnMapa.add(polyline);
+                .width(ancho));
+        polylinesActuales.add(polyline);
     }
 
-    private void limpiarPolylines() {
-        for (Polyline polyline : polylinesEnMapa) {
+    private void limpiarMapa() {
+        if (mMap == null) return;
+        for (Polyline polyline : polylinesActuales) {
             polyline.remove();
         }
-        polylinesEnMapa.clear();
+        polylinesActuales.clear();
+        mMap.clear();
     }
 
-
-    // --- Métodos de ayuda y lógica existente (sin cambios mayores) ---
-
-    private void abrirFormularioDeReporte(LatLng latLng) {
-        String nombreLugar = "Ubicación desconocida";
+    private String getApiKey() {
         try {
-            Geocoder geocoder = new Geocoder(requireContext(), Locale.getDefault());
-            List<Address> addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1);
-            if (addresses != null && !addresses.isEmpty()) {
-                nombreLugar = addresses.get(0).getAddressLine(0);
-            }
+            return requireActivity().getPackageManager().getApplicationInfo(requireActivity().getPackageName(), PackageManager.GET_META_DATA).metaData.getString("com.google.android.geo.API_KEY");
         } catch (Exception e) {
-            e.printStackTrace();
-        }
-
-        Bundle bundle = new Bundle();
-        bundle.putDouble("lat", latLng.latitude);
-        bundle.putDouble("lng", latLng.longitude);
-        bundle.putString("nombreLugar", nombreLugar);
-
-        NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment_content_contenido_general);
-        navController.navigate(R.id.nav_gallery, bundle);
-    }
-
-    private String getApiKeyFromManifest() {
-        try {
-            return requireActivity().getPackageManager()
-                    .getApplicationInfo(requireActivity().getPackageName(), PackageManager.GET_META_DATA)
-                    .metaData.getString("com.google.android.geo.API_KEY");
-        } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
-            return null;
+            Log.e("ApiKey", "No se pudo leer la API Key del Manifest", e);
+            return "";
         }
     }
 
@@ -386,66 +434,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             } while (b >= 0x20);
             int dlng = ((result & 1) != 0 ? ~(result >> 1) : (result >> 1));
             lng += dlng;
-            poly.add(new LatLng((((double) lat / 1E5)), (((double) lng / 1E5))));
+            LatLng p = new LatLng((((double) lat / 1E5)), (((double) lng / 1E5)));
+            poly.add(p);
         }
         return poly;
-    }
-
-    private void setupSpinners(View root) {
-        // Spinner Modo de transporte
-        Spinner spinnerModo = root.findViewById(R.id.spinnerModo);
-        ArrayAdapter<CharSequence> adapterModo = ArrayAdapter.createFromResource(requireContext(),
-                R.array.modos_transporte, android.R.layout.simple_spinner_item);
-        adapterModo.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        spinnerModo.setAdapter(adapterModo);
-        spinnerModo.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                switch (position) {
-                    case 0: modoTransporte = "walking"; break;
-                    case 1: modoTransporte = "bicycling"; break;
-                    case 2: modoTransporte = "driving"; break;
-                }
-            }
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) { }
-        });
-        // Aquí puedes configurar los otros spinners (idioma, filtro) si lo necesitas
-    }
-
-    private void setAutocomplete(AutoCompleteTextView editText, boolean esOrigen) {
-        // Tu código de autocompletado existente va aquí, funciona bien.
-        // ...
-    }
-
-    private void prepararActualizacionUbicacion() {
-        // Tu código de actualización de ubicación en tiempo real va aquí.
-        // ...
-    }
-
-
-    /**
-     * 🔹 Clase de Ayuda para manejar la información de cada ruta analizada.
-     */
-    private static class RutaAnalizada {
-        final List<LatLng> puntos;
-        final String duracion;
-        final int distancia; // en metros
-        final int puntajeRiesgo;
-
-        RutaAnalizada(List<LatLng> puntos, String duracion, int distancia, int puntajeRiesgo) {
-            this.puntos = puntos;
-            this.duracion = duracion;
-            this.distancia = distancia;
-            this.puntajeRiesgo = puntajeRiesgo;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            RutaAnalizada that = (RutaAnalizada) o;
-            return distancia == that.distancia && puntajeRiesgo == that.puntajeRiesgo;
-        }
     }
 }
