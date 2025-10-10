@@ -12,4 +12,11 @@
     <string name="menu_home">Home</string>
     <string name="menu_gallery">Gallery</string>
     <string name="menu_slideshow">Slideshow</string>
+
+    <!-- 🔹 AÑADIDO: Array para los modos de transporte que soluciona el error -->
+    <string-array name="modos_transporte">
+        <item>A pie</item>
+        <item>Bicicleta</item>
+        <item>Carro</item>
+    </string-array>
 </resources>
