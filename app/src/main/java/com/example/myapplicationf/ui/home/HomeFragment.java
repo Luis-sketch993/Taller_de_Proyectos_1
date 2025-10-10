@@ -43,8 +43,10 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.PolylineOptions;
@@ -78,8 +80,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private AutoCompleteTextView etOrigen, etDestino;
     private LatLng origenLatLng, destinoLatLng;
     private List<Reporte> listaDeReportes = new ArrayList<>();
-    private List<Polyline> polylinesActuales = new ArrayList<>();
     private TextView tvTiempo;
+
+    // --- 🔹 CAMBIO CLAVE: Listas para gestionar elementos del mapa sin usar mMap.clear() ---
+    private List<Polyline> polylinesActuales = new ArrayList<>();
+    private List<Circle> circleReportesActuales = new ArrayList<>();
+    private List<Marker> markersActuales = new ArrayList<>();
 
     private String modoTransporte = "driving";
 
@@ -135,13 +141,13 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             Log.d(TAG, "Botón 'Calcular Ruta' presionado.");
             if (origenLatLng != null && destinoLatLng != null) {
                 Log.d(TAG, "Origen y Destino válidos. Procediendo a calcular.");
-                limpiarMapa();
+                limpiarRutasYMarcadores();
 
-                // --- 🔹 CAMBIO CLAVE: Volver a dibujar los reportes después de limpiar ---
-                dibujarReportesEnMapa();
+                Marker origenMarker = mMap.addMarker(new MarkerOptions().position(origenLatLng).title("Origen"));
+                Marker destinoMarker = mMap.addMarker(new MarkerOptions().position(destinoLatLng).title("Destino"));
+                markersActuales.add(origenMarker);
+                markersActuales.add(destinoMarker);
 
-                mMap.addMarker(new MarkerOptions().position(origenLatLng).title("Origen"));
-                mMap.addMarker(new MarkerOptions().position(destinoLatLng).title("Destino"));
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(origenLatLng, 15));
                 calcularRutas(origenLatLng, destinoLatLng);
             } else {
@@ -164,6 +170,13 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         } else {
             ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
         }
+
+        // --- 🔹 CAMBIO CLAVE: Hacer las rutas clickables ---
+        mMap.setOnPolylineClickListener(polyline -> {
+            if (polyline.getTag() != null) {
+                Toast.makeText(getContext(), polyline.getTag().toString(), Toast.LENGTH_LONG).show();
+            }
+        });
 
         cargarReportesDesdeFirestore();
 
@@ -252,33 +265,34 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 listaDeReportes.add(doc.toObject(Reporte.class));
             }
             Log.d(TAG, "Reportes cargados: " + listaDeReportes.size() + ". Redibujando en mapa.");
-            // --- 🔹 CAMBIO CLAVE: Dibujar los reportes cada vez que se actualizan de Firestore ---
             if (mMap != null) {
                 dibujarReportesEnMapa();
             }
         });
     }
 
-    // --- 🔹 MÉTODO RESTAURADO: Para dibujar las zonas de reporte ---
     private void dibujarReportesEnMapa() {
         if (mMap == null) return;
 
-        // Limpiamos el mapa, pero guardamos las rutas para volver a dibujarlas
-        mMap.clear();
+        for (Circle circle : circleReportesActuales) {
+            circle.remove();
+        }
+        circleReportesActuales.clear();
 
         Log.d(TAG, "Dibujando " + listaDeReportes.size() + " reportes en el mapa.");
         for (Reporte reporte : listaDeReportes) {
             int color;
             switch (reporte.getRiesgo()) {
-                case 1: color = Color.parseColor("#5533FF33"); break; // Verde translúcido
-                case 2: color = Color.parseColor("#55FFA500"); break; // Naranja translúcido
-                default: color = Color.parseColor("#55FF3333"); break; // Rojo translúcido
+                case 1: color = Color.parseColor("#5533FF33"); break;
+                case 2: color = Color.parseColor("#55FFA500"); break;
+                default: color = Color.parseColor("#55FF3333"); break;
             }
-            mMap.addCircle(new CircleOptions()
+            Circle circle = mMap.addCircle(new CircleOptions()
                     .center(new LatLng(reporte.getLat(), reporte.getLng()))
                     .radius(75)
                     .strokeWidth(0)
                     .fillColor(color));
+            circleReportesActuales.add(circle);
         }
     }
 
@@ -312,7 +326,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             Log.d(TAG, "Estado de la respuesta: " + status);
 
             if (!status.equals("OK")) {
-                // --- 🔹 CAMBIO CLAVE: Mostrar el mensaje de error de Google ---
                 String errorMsg = response.optString("error_message", "Causa desconocida.");
                 Toast.makeText(getContext(), "No se encontraron rutas. Estado: " + status + ". Razón: " + errorMsg, Toast.LENGTH_LONG).show();
                 return;
@@ -366,16 +379,22 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             String tiempoRutaCorta = routes.getJSONObject(rutaMasCortaIndex).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getString("text");
             String tiempoRutaSegura = routes.getJSONObject(rutaMasSeguraIndex).getJSONArray("legs").getJSONObject(0).getJSONObject("duration").getString("text");
 
+            // --- 🔹 CAMBIO CLAVE: Lógica mejorada para mostrar las opciones ---
             if (rutaMasCortaIndex == rutaMasSeguraIndex) {
-                tvTiempo.setText("Ruta más corta y segura: " + tiempoRutaCorta);
+                tvTiempo.setText("Ruta Óptima (corta y segura): " + tiempoRutaCorta);
                 String polyline = routes.getJSONObject(rutaMasCortaIndex).getJSONObject("overview_polyline").getString("points");
-                dibujarRuta(decodePolyline(polyline), Color.GREEN, 20);
+                String tagUnica = "Ruta Óptima: " + tiempoRutaCorta + " (Riesgo: " + mejorPuntajeRiesgo + ")";
+                dibujarRuta(decodePolyline(polyline), Color.GREEN, 20, tagUnica);
             } else {
-                tvTiempo.setText("Ruta corta: " + tiempoRutaCorta + " | Ruta segura: " + tiempoRutaSegura);
+                tvTiempo.setText("Comparando Rutas | Azul: Más Corta (" + tiempoRutaCorta + ") | Verde: Más Segura (" + tiempoRutaSegura + ")");
+
                 String polylineCorta = routes.getJSONObject(rutaMasCortaIndex).getJSONObject("overview_polyline").getString("points");
-                dibujarRuta(decodePolyline(polylineCorta), Color.BLUE, 15);
+                String tagCorta = "Ruta más corta: " + tiempoRutaCorta;
+                dibujarRuta(decodePolyline(polylineCorta), Color.BLUE, 15, tagCorta);
+
                 String polylineSegura = routes.getJSONObject(rutaMasSeguraIndex).getJSONObject("overview_polyline").getString("points");
-                dibujarRuta(decodePolyline(polylineSegura), Color.GREEN, 20);
+                String tagSegura = "Ruta más segura: " + tiempoRutaSegura + " (Riesgo: " + mejorPuntajeRiesgo + ")";
+                dibujarRuta(decodePolyline(polylineSegura), Color.GREEN, 20, tagSegura);
             }
 
         } catch (Exception e) {
@@ -384,23 +403,29 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
-    private void dibujarRuta(List<LatLng> puntos, int color, float ancho) {
+    private void dibujarRuta(List<LatLng> puntos, int color, float ancho, String tag) {
         if (mMap == null) return;
-        Log.d(TAG, "Dibujando ruta con " + puntos.size() + " puntos, color " + color);
+        Log.d(TAG, "Dibujando ruta con tag: " + tag);
         Polyline polyline = mMap.addPolyline(new PolylineOptions()
                 .addAll(puntos)
                 .color(color)
-                .width(ancho));
+                .width(ancho)
+                .clickable(true)); // Hacemos la ruta clickable
+        polyline.setTag(tag); // Guardamos la información en la ruta
         polylinesActuales.add(polyline);
     }
 
-    private void limpiarMapa() {
+    private void limpiarRutasYMarcadores() {
         if (mMap == null) return;
         for (Polyline polyline : polylinesActuales) {
             polyline.remove();
         }
         polylinesActuales.clear();
-        mMap.clear();
+
+        for (Marker marker : markersActuales) {
+            marker.remove();
+        }
+        markersActuales.clear();
     }
 
     private String getApiKey() {
