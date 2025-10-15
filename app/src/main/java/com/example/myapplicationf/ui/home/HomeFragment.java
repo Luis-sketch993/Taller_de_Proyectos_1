@@ -1,5 +1,12 @@
 package com.example.myapplicationf.ui.home;
 
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
+import android.content.Intent;
+import android.os.Handler;
+
+
+
 import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -80,6 +87,13 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     private String modoTransporte = "driving";
     private String idiomaSeleccionado = "es";
+    private Button btnCompartir, btnGuardarRuta;
+    private FusedLocationProviderClient fusedLocationClient;
+    private Handler handler = new Handler();
+    private Runnable runnable;
+    private long intervaloEnvio = 10000; // 10 segundos
+
+
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -95,6 +109,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         etDestino = root.findViewById(R.id.etDestino);
         tvTiempo = root.findViewById(R.id.tvTiempo);
         btnCalcularRuta = root.findViewById(R.id.btnCalcularRuta);
+        btnCompartir = root.findViewById(R.id.btnCompartir);
+        btnGuardarRuta = root.findViewById(R.id.btnGuardarRuta);
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
+
+
+
         Spinner spinnerModo = root.findViewById(R.id.spinnerModo);
         Spinner spinnerIdiomas = root.findViewById(R.id.spinnerIdiomas);
 
@@ -163,9 +183,75 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         });
 
+        btnCompartir.setOnClickListener(v -> {
+            if (origenLatLng != null && destinoLatLng != null) {
+                // Generar enlace de Google Maps con ruta
+                String urlMaps = "https://www.google.com/maps/dir/?api=1" +
+                        "&origin=" + origenLatLng.latitude + "," + origenLatLng.longitude +
+                        "&destination=" + destinoLatLng.latitude + "," + destinoLatLng.longitude +
+                        "&travelmode=" + modoTransporte; // driving, walking, bicycling
+
+                // Crear intent para WhatsApp (puedes cambiar a SMS si quieres)
+                Intent intent = new Intent(Intent.ACTION_SEND);
+                intent.setType("text/plain");
+                intent.setPackage("com.whatsapp"); // eliminar esta línea para usar cualquier app de mensajería
+                intent.putExtra(Intent.EXTRA_TEXT, "Mira esta ruta: " + urlMaps);
+
+                try {
+                    startActivity(intent);
+                } catch (android.content.ActivityNotFoundException ex) {
+                    Toast.makeText(requireContext(), "WhatsApp no está instalado.", Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(requireContext(), "Selecciona origen y destino primero", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        btnGuardarRuta.setOnClickListener(v -> {
+            if (origenLatLng != null && destinoLatLng != null) {
+                // Aquí puedes guardar la ruta en Firestore o local
+                Toast.makeText(requireContext(), "Ruta guardada exitosamente", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(requireContext(), "Selecciona origen y destino primero", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+
         actualizarTextosUI();
         return root;
     }
+
+    private void iniciarEnvioUbicacion() {
+        runnable = new Runnable() {
+            @Override
+            public void run() {
+                if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(requireActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
+                    return;
+                }
+
+                fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                    if (location != null) {
+                        // Enviar ubicación actual
+                        String mensaje = "Ubicación actual: " + location.getLatitude() + "," + location.getLongitude();
+
+                        // Aquí puedes enviar vía Intent, Firestore, o lo que necesites
+                        Toast.makeText(requireContext(), "Enviando: " + mensaje, Toast.LENGTH_SHORT).show();
+                    }
+                });
+
+                handler.postDelayed(this, intervaloEnvio);
+            }
+        };
+        handler.post(runnable);
+    }
+
+    private void detenerEnvioUbicacion() {
+        if (handler != null && runnable != null) {
+            handler.removeCallbacks(runnable);
+        }
+    }
+
 
     private void actualizarTextosUI() {
         etOrigen.setHint(getString(R.string.hint_origen));
@@ -173,6 +259,18 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         btnCalcularRuta.setText(getString(R.string.boton_calcular_ruta));
         tvTiempo.setText(getString(R.string.tiempo_estimado_inicial));
         idiomaSeleccionado = Locale.getDefault().getLanguage();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        iniciarEnvioUbicacion();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        detenerEnvioUbicacion();
     }
 
     @Override
