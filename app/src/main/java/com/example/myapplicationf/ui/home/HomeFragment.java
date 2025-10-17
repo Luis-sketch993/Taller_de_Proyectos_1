@@ -83,7 +83,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     private AutoCompleteTextView etOrigen, etDestino;
     private LatLng origenLatLng, destinoLatLng;
-    private String origenNombre, destinoNombre; // <-- CAMBIO CLAVE
+    private String origenNombre, destinoNombre;
     private List<Reporte> listaDeReportes = new ArrayList<>();
     private TextView tvTiempo;
     private Button btnCalcularRuta;
@@ -210,7 +210,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         });
 
-        // --- 🔹 CAMBIO CLAVE: Conectar el botón de guardar con la nueva lógica ---
         btnGuardarRuta.setOnClickListener(v -> {
             if (origenLatLng != null && destinoLatLng != null && origenNombre != null && destinoNombre != null) {
                 guardarRutaEnHistorial();
@@ -224,7 +223,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         return root;
     }
 
-    // --- 🔹 NUEVO MÉTODO: Lógica para guardar la ruta en Firestore ---
     private void guardarRutaEnHistorial() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) {
@@ -255,14 +253,12 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             @Override
             public void run() {
                 if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                    ActivityCompat.requestPermissions(requireActivity(), new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 1);
                     return;
                 }
 
                 fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
                     if (location != null) {
-                        String mensaje = "Ubicación actual: " + location.getLatitude() + "," + location.getLongitude();
-                        // Ya no mostramos un Toast aquí para no molestar al usuario
+                        // Lógica de envío de ubicación
                     }
                 });
 
@@ -319,6 +315,27 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         cargarReportesDesdeFirestore();
 
+        // --- 🔹 CAMBIO CLAVE: Comprobar si vienen datos del historial ---
+        if (getArguments() != null && getArguments().containsKey("origenLat")) {
+            Bundle args = getArguments();
+            origenLatLng = new LatLng(args.getDouble("origenLat"), args.getDouble("origenLng"));
+            destinoLatLng = new LatLng(args.getDouble("destinoLat"), args.getDouble("destinoLng"));
+            origenNombre = args.getString("origenNombre");
+            destinoNombre = args.getString("destinoNombre");
+
+            // Rellenar los campos de texto
+            etOrigen.setText(origenNombre);
+            etDestino.setText(destinoNombre);
+
+            // Dibujar la ruta automáticamente
+            // Usamos un Handler para asegurar que el mapa esté completamente listo
+            new Handler().postDelayed(() -> {
+                if (mMap != null) {
+                    btnCalcularRuta.performClick();
+                }
+            }, 500); // 500ms de espera
+        }
+
         mMap.setOnMapClickListener(latLng -> {
             String nombreLugar = getString(R.string.ubicacion_desconocida);
             try {
@@ -371,11 +388,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                             String toastMessage;
                             if (esOrigen) {
                                 origenLatLng = place.getLatLng();
-                                origenNombre = place.getName(); // <-- CAMBIO CLAVE
+                                origenNombre = place.getName();
                                 toastMessage = getString(R.string.origen_fijado, place.getName());
                             } else {
                                 destinoLatLng = place.getLatLng();
-                                destinoNombre = place.getName(); // <-- CAMBIO CLAVE
+                                destinoNombre = place.getName();
                                 toastMessage = getString(R.string.destino_fijado, place.getName());
                             }
                             Toast.makeText(getContext(), toastMessage, Toast.LENGTH_SHORT).show();

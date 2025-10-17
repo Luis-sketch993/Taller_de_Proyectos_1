@@ -6,12 +6,12 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-
 import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
+import androidx.navigation.NavController;
+import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
-
 import com.example.myapplicationf.Adapters.HistorialAdapter;
 import com.example.myapplicationf.Models.HistorialRuta;
 import com.example.myapplicationf.R;
@@ -21,20 +21,18 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
-
 import java.util.ArrayList;
 import java.util.List;
 
-public class SlideshowFragment extends Fragment {
+public class SlideshowFragment extends Fragment implements HistorialAdapter.OnItemClickListener {
 
     private static final String TAG = "HistorialDebug";
-
     private RecyclerView recyclerView;
     private HistorialAdapter adapter;
     private List<HistorialRuta> historialRutaList;
     private FirebaseFirestore db;
     private TextView tvEmptyHistory;
-    private ListenerRegistration historialListener; // <-- Para gestionar el listener
+    private ListenerRegistration historialListener;
 
     public View onCreateView(@NonNull LayoutInflater inflater,
                              ViewGroup container, Bundle savedInstanceState) {
@@ -44,7 +42,7 @@ public class SlideshowFragment extends Fragment {
         tvEmptyHistory = root.findViewById(R.id.tvEmptyHistory);
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
         historialRutaList = new ArrayList<>();
-        adapter = new HistorialAdapter(historialRutaList);
+        adapter = new HistorialAdapter(historialRutaList, this);
         recyclerView.setAdapter(adapter);
 
         db = FirebaseFirestore.getInstance();
@@ -54,14 +52,12 @@ public class SlideshowFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        // --- 🔹 CAMBIO CLAVE: Iniciar el listener en onStart ---
         cargarHistorial();
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        // --- 🔹 CAMBIO CLAVE: Detener el listener en onStop para evitar fugas de memoria ---
         if (historialListener != null) {
             historialListener.remove();
         }
@@ -84,38 +80,45 @@ public class SlideshowFragment extends Fragment {
         historialListener = query.addSnapshotListener((snapshots, e) -> {
             if (e != null) {
                 Log.e(TAG, "Error al escuchar el historial.", e);
-                tvEmptyHistory.setText(getString(R.string.historial_error_cargar));
-                tvEmptyHistory.setVisibility(View.VISIBLE);
-                recyclerView.setVisibility(View.GONE);
+                if (historialRutaList.isEmpty()) {
+                    tvEmptyHistory.setText(getString(R.string.historial_error_cargar));
+                    tvEmptyHistory.setVisibility(View.VISIBLE);
+                    recyclerView.setVisibility(View.GONE);
+                }
                 return;
             }
 
             if (snapshots != null) {
-                Log.d(TAG, "Actualización recibida. Número de documentos: " + snapshots.size());
-                // --- 🔹 CAMBIO CLAVE: Lógica de actualización más segura ---
                 List<HistorialRuta> nuevasRutas = new ArrayList<>();
                 for (QueryDocumentSnapshot doc : snapshots) {
                     nuevasRutas.add(doc.toObject(HistorialRuta.class));
                 }
+                adapter.updateData(nuevasRutas);
 
-                historialRutaList.clear();
-                historialRutaList.addAll(nuevasRutas);
-                adapter.notifyDataSetChanged();
-
-                if (historialRutaList.isEmpty()) {
-                    Log.d(TAG, "La lista del historial está vacía. Mostrando mensaje.");
+                if (nuevasRutas.isEmpty()) {
                     tvEmptyHistory.setText(getString(R.string.historial_vacio));
                     tvEmptyHistory.setVisibility(View.VISIBLE);
                     recyclerView.setVisibility(View.GONE);
                 } else {
-                    Log.d(TAG, "La lista del historial tiene datos. Mostrando RecyclerView.");
                     tvEmptyHistory.setVisibility(View.GONE);
                     recyclerView.setVisibility(View.VISIBLE);
                 }
-            } else {
-                Log.w(TAG, "La actualización de snapshots es nula.");
             }
         });
+    }
+
+    @Override
+    public void onItemClick(HistorialRuta historialRuta) {
+        Bundle bundle = new Bundle();
+        bundle.putDouble("origenLat", historialRuta.getOrigenLat());
+        bundle.putDouble("origenLng", historialRuta.getOrigenLng());
+        bundle.putDouble("destinoLat", historialRuta.getDestinoLat());
+        bundle.putDouble("destinoLng", historialRuta.getDestinoLng());
+        bundle.putString("origenNombre", historialRuta.getOrigenNombre());
+        bundle.putString("destinoNombre", historialRuta.getDestinoNombre());
+
+        NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment_content_contenido_general);
+        navController.navigate(R.id.nav_home, bundle);
     }
 }
 
