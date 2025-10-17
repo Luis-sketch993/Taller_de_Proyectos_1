@@ -6,6 +6,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 import android.content.Intent;
+import android.os.Build;
 import android.os.Handler;
 
 
@@ -29,6 +30,9 @@ import android.widget.Button;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import com.example.myapplicationf.Utils.Notificaciones_Zonas;
+import androidx.core.content.ContextCompat;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
@@ -88,6 +92,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private TextView tvTiempo;
     private Button btnCalcularRuta;
 
+    private Notificaciones_Zonas notificacionesZonas;
+    private static final int REQUEST_NOTIFICATION_PERMISSION = 1001;
+
+
     private List<Polyline> polylinesActuales = new ArrayList<>();
     private List<Circle> circleReportesActuales = new ArrayList<>();
     private List<Marker> markersActuales = new ArrayList<>();
@@ -98,8 +106,16 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private FusedLocationProviderClient fusedLocationClient;
     private Handler handler = new Handler();
     private Runnable runnable;
-    private long intervaloEnvio = 10000;
+    private long intervaloEnvio;
 
+
+    private boolean notificacionesActivadas = true;  // permite activar/desactivar
+    private long intervaloNotificacion; // se asignará dinámicamente     // cada 30 segundos
+    private long ultimaNotificacion = 0;             // control de frecuencia
+    private boolean mostrarZonaTranquila = true;     // alerta cuando no hay riesgos
+
+    private Handler handlerAlertas = new Handler();
+    private Runnable runnableAlertas;
 
 
     @Override
@@ -220,8 +236,19 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
 
         actualizarTextosUI();
+        solicitarPermisoNotificaciones();
+        notificacionesZonas = new Notificaciones_Zonas(requireContext());
+
+        intervaloEnvio = notificacionesZonas.getIntervaloAlertas(); // ← aquí se usa realmente
+        intervaloNotificacion = intervaloEnvio;
+
+        iniciarAlertasZonas();
         return root;
     }
+
+
+
+
 
     private void guardarRutaEnHistorial() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
@@ -557,5 +584,110 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         }
         return poly;
     }
+
+    private void iniciarAlertasZonas() {
+        runnableAlertas = new Runnable() {
+            @Override
+            public void run() {
+                if (!notificacionesActivadas) {
+                    handlerAlertas.postDelayed(this, intervaloNotificacion);
+                    return;
+                }
+
+                if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    return;
+                }
+
+                fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                    if (location != null && System.currentTimeMillis() - ultimaNotificacion >= intervaloNotificacion) {
+                        ultimaNotificacion = System.currentTimeMillis();
+
+                        LatLng posicionActual = new LatLng(location.getLatitude(), location.getLongitude());
+                        boolean enZona = false;
+
+                        for (Reporte reporte : listaDeReportes) {
+                            float[] distancia = new float[1];
+                            Location.distanceBetween(
+                                    posicionActual.latitude,
+                                    posicionActual.longitude,
+                                    reporte.getLat(),
+                                    reporte.getLng(),
+                                    distancia
+                            );
+
+                            if (distancia[0] < 75) {
+                                enZona = true;
+                                switch (reporte.getRiesgo()) {
+                                    case 1:
+                                        notificacionesZonas.mostrarNotificacion(
+                                                "Zona segura",
+                                                "Te encuentras en una zona verde. Sin riesgos.",
+                                                Color.GREEN
+                                        );
+                                        break;
+                                    case 2:
+                                        notificacionesZonas.mostrarNotificacion(
+                                                "Zona de precaución",
+                                                "Zona amarilla detectada. Mantente alerta.",
+                                                Color.YELLOW
+                                        );
+                                        break;
+                                    case 3:
+                                        notificacionesZonas.mostrarNotificacion(
+                                                "Zona peligrosa",
+                                                "¡Estás en una zona roja! Evita permanecer aquí.",
+                                                Color.RED
+                                        );
+                                        break;
+                                }
+                                break;
+                            }
+                        }
+
+                        if (!enZona && mostrarZonaTranquila) {
+                            notificacionesZonas.mostrarNotificacion(
+                                    "Zona tranquila",
+                                    "No hay reportes cercanos. Todo en calma.",
+                                    Color.CYAN
+                            );
+                        }
+                    }
+                });
+
+                handlerAlertas.postDelayed(this, intervaloNotificacion);
+            }
+        };
+
+        handlerAlertas.post(runnableAlertas);
+    }
+
+    private void solicitarPermisoNotificaciones() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
+            if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                        requireActivity(),
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                        REQUEST_NOTIFICATION_PERMISSION
+                );
+            }
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(getContext(), "Permiso de notificación concedido", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(getContext(), "Permiso de notificación denegado", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+
+
+
 }
 
