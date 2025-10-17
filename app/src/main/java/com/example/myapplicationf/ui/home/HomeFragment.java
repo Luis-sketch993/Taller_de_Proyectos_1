@@ -2,6 +2,9 @@ package com.example.myapplicationf.ui.home;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+
 import android.content.Intent;
 import android.os.Handler;
 
@@ -38,6 +41,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.myapplicationf.ContenidoGeneral;
+import com.example.myapplicationf.Models.HistorialRuta;
 import com.example.myapplicationf.Models.Reporte;
 import com.example.myapplicationf.R;
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -58,6 +62,7 @@ import com.google.android.libraries.places.api.model.Place;
 import com.google.android.libraries.places.api.net.FetchPlaceRequest;
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest;
 import com.google.android.libraries.places.api.net.PlacesClient;
+import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 
@@ -66,6 +71,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -77,6 +83,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     private AutoCompleteTextView etOrigen, etDestino;
     private LatLng origenLatLng, destinoLatLng;
+    private String origenNombre, destinoNombre; // <-- CAMBIO CLAVE
     private List<Reporte> listaDeReportes = new ArrayList<>();
     private TextView tvTiempo;
     private Button btnCalcularRuta;
@@ -91,7 +98,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private FusedLocationProviderClient fusedLocationClient;
     private Handler handler = new Handler();
     private Runnable runnable;
-    private long intervaloEnvio = 10000; // 10 segundos
+    private long intervaloEnvio = 10000;
 
 
 
@@ -146,7 +153,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         adapterIdioma.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerIdiomas.setAdapter(adapterIdioma);
 
-        // Pre-select the spinner with the current language
         String currentLang = Locale.getDefault().getLanguage();
         if (currentLang.equals("en")) {
             spinnerIdiomas.setSelection(1);
@@ -158,7 +164,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             @Override
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
                 String lang = (position == 0) ? "es" : "en";
-                // Only trigger the change if the selected language is different
                 if (!Locale.getDefault().getLanguage().equals(lang)) {
                     if (getActivity() instanceof ContenidoGeneral) {
                         ((ContenidoGeneral) getActivity()).setLocale(lang);
@@ -185,16 +190,14 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         btnCompartir.setOnClickListener(v -> {
             if (origenLatLng != null && destinoLatLng != null) {
-                // Generar enlace de Google Maps con ruta
                 String urlMaps = "https://www.google.com/maps/dir/?api=1" +
                         "&origin=" + origenLatLng.latitude + "," + origenLatLng.longitude +
                         "&destination=" + destinoLatLng.latitude + "," + destinoLatLng.longitude +
-                        "&travelmode=" + modoTransporte; // driving, walking, bicycling
+                        "&travelmode=" + modoTransporte;
 
-                // Crear intent para WhatsApp (puedes cambiar a SMS si quieres)
                 Intent intent = new Intent(Intent.ACTION_SEND);
                 intent.setType("text/plain");
-                intent.setPackage("com.whatsapp"); // eliminar esta línea para usar cualquier app de mensajería
+                intent.setPackage("com.whatsapp");
                 intent.putExtra(Intent.EXTRA_TEXT, "Mira esta ruta: " + urlMaps);
 
                 try {
@@ -207,18 +210,44 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         });
 
+        // --- 🔹 CAMBIO CLAVE: Conectar el botón de guardar con la nueva lógica ---
         btnGuardarRuta.setOnClickListener(v -> {
-            if (origenLatLng != null && destinoLatLng != null) {
-                // Aquí puedes guardar la ruta en Firestore o local
-                Toast.makeText(requireContext(), "Ruta guardada exitosamente", Toast.LENGTH_SHORT).show();
+            if (origenLatLng != null && destinoLatLng != null && origenNombre != null && destinoNombre != null) {
+                guardarRutaEnHistorial();
             } else {
-                Toast.makeText(requireContext(), "Selecciona origen y destino primero", Toast.LENGTH_SHORT).show();
+                Toast.makeText(requireContext(), getString(R.string.historial_selecciona_ruta), Toast.LENGTH_SHORT).show();
             }
         });
 
 
         actualizarTextosUI();
         return root;
+    }
+
+    // --- 🔹 NUEVO MÉTODO: Lógica para guardar la ruta en Firestore ---
+    private void guardarRutaEnHistorial() {
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+        if (user == null) {
+            Toast.makeText(getContext(), getString(R.string.historial_no_login), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String uid = user.getUid();
+
+        HistorialRuta nuevaRuta = new HistorialRuta(
+                uid,
+                origenNombre,
+                destinoNombre,
+                origenLatLng.latitude,
+                origenLatLng.longitude,
+                destinoLatLng.latitude,
+                destinoLatLng.longitude,
+                new Timestamp(new Date())
+        );
+
+        db.collection("historialRutas")
+                .add(nuevaRuta)
+                .addOnSuccessListener(documentReference -> Toast.makeText(getContext(), getString(R.string.historial_ruta_guardada), Toast.LENGTH_SHORT).show())
+                .addOnFailureListener(e -> Toast.makeText(getContext(), getString(R.string.historial_error_guardar), Toast.LENGTH_SHORT).show());
     }
 
     private void iniciarEnvioUbicacion() {
@@ -232,11 +261,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
                 fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
                     if (location != null) {
-                        // Enviar ubicación actual
                         String mensaje = "Ubicación actual: " + location.getLatitude() + "," + location.getLongitude();
-
-                        // Aquí puedes enviar vía Intent, Firestore, o lo que necesites
-                        Toast.makeText(requireContext(), "Enviando: " + mensaje, Toast.LENGTH_SHORT).show();
+                        // Ya no mostramos un Toast aquí para no molestar al usuario
                     }
                 });
 
@@ -345,9 +371,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                             String toastMessage;
                             if (esOrigen) {
                                 origenLatLng = place.getLatLng();
+                                origenNombre = place.getName(); // <-- CAMBIO CLAVE
                                 toastMessage = getString(R.string.origen_fijado, place.getName());
                             } else {
                                 destinoLatLng = place.getLatLng();
+                                destinoNombre = place.getName(); // <-- CAMBIO CLAVE
                                 toastMessage = getString(R.string.destino_fijado, place.getName());
                             }
                             Toast.makeText(getContext(), toastMessage, Toast.LENGTH_SHORT).show();

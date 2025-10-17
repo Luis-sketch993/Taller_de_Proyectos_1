@@ -27,7 +27,7 @@
             android:name=".ContenidoGeneral"
             android:exported="false"
             android:label="@string/title_activity_contenido_general"
-            android:theme="@style/Theme.MyApplicationf.NoActionBar" /> <!-- 🔑 API Key de Google Maps -->
+            android:theme="@style/Theme.MyApplicationf.NoActionBar" /> <!-- API Key de Google Maps -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyAbiXfffKiKJMOIfeD4A2RQaPq_Vuq4Vec" /> <!-- Si ya migraste el mapa al HomeFragment, esta Activity sobra -->

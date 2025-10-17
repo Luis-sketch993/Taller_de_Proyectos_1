@@ -10,7 +10,7 @@
 
     <string name="menu_home">Map</string>
     <string name="menu_gallery">Report</string>
-    <string name="menu_slideshow">My Reports</string>
+    <string name="menu_slideshow">History</string>
 
     <!-- Texts for HomeFragment -->
     <string name="hint_origen">Origin Point</string>
@@ -27,6 +27,16 @@
     <string name="tag_ruta_optima">Optimal Route: %1$s (Risk: %2$d)</string>
     <string name="no_se_encontraron_rutas">No routes were found.</string>
     <string name="ubicacion_desconocida">Unknown Location</string>
+
+    <!-- Texts for History -->
+    <string name="historial_ruta_guardada">Route saved to history</string>
+    <string name="historial_error_guardar">Error saving route</string>
+    <string name="historial_no_login">Log in to see your history</string>
+    <string name="historial_selecciona_ruta">First calculate a route to save it</string>
+    <string name="historial_vacio">Your route history is empty.</string>
+    <string name="historial_error_cargar">Could not load history.</string>
+    <string name="historial_origen_label">Origin:</string>
+    <string name="historial_destino_label">Destination:</string>
 
     <string-array name="modos_transporte">
         <item>Driving</item>

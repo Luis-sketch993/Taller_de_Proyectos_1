@@ -10,7 +10,7 @@
 
     <string name="menu_home">Mapa</string>
     <string name="menu_gallery">Reportar</string>
-    <string name="menu_slideshow">Mis Reportes</string>
+    <string name="menu_slideshow">Historial</string>
 
     <!-- Textos para HomeFragment -->
     <string name="hint_origen">Punto de Origen</string>
@@ -27,6 +27,16 @@
     <string name="tag_ruta_optima">Ruta Óptima: %1$s (Riesgo: %2$d)</string>
     <string name="no_se_encontraron_rutas">No se encontraron rutas.</string>
     <string name="ubicacion_desconocida">Ubicación desconocida</string>
+
+    <!-- Textos para Historial -->
+    <string name="historial_ruta_guardada">Ruta guardada en el historial</string>
+    <string name="historial_error_guardar">Error al guardar la ruta</string>
+    <string name="historial_no_login">Inicia sesión para ver tu historial</string>
+    <string name="historial_selecciona_ruta">Primero calcula una ruta para guardarla</string>
+    <string name="historial_vacio">Tu historial de rutas está vacío.</string>
+    <string name="historial_error_cargar">No se pudo cargar el historial.</string>
+    <string name="historial_origen_label">Origen:</string>
+    <string name="historial_destino_label">Destino:</string>
 
     <string-array name="modos_transporte">
         <item>Carro</item>
