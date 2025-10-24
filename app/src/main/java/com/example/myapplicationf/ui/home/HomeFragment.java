@@ -52,6 +52,8 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.CircleOptions;
 import com.google.android.gms.maps.model.LatLng;
@@ -95,10 +97,14 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private Notificaciones_Zonas notificacionesZonas;
     private static final int REQUEST_NOTIFICATION_PERMISSION = 1001;
 
-
+    // 🔹 CORRECCIÓN 1 (TYPO) 🔹
+    // Se corrigió el nombre de `polylinesActualES` a `polylinesActuales`
     private List<Polyline> polylinesActuales = new ArrayList<>();
     private List<Circle> circleReportesActuales = new ArrayList<>();
     private List<Marker> markersActuales = new ArrayList<>();
+
+    private List<Marker> markerReportesActuales = new ArrayList<>();
+    private int filtroRiesgo = 0; // 0=Todos, 1=Seguro, 2=Moderado, 3=Inseguro
 
     private String modoTransporte = "driving";
     private String idiomaSeleccionado = "es";
@@ -109,10 +115,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private long intervaloEnvio;
 
 
-    private boolean notificacionesActivadas = true;  // permite activar/desactivar
-    private long intervaloNotificacion; // se asignará dinámicamente     // cada 30 segundos
-    private long ultimaNotificacion = 0;             // control de frecuencia
-    private boolean mostrarZonaTranquila = true;     // alerta cuando no hay riesgos
+    private boolean notificacionesActivadas = true;
+    private long intervaloNotificacion;
+    private long ultimaNotificacion = 0;
+    private boolean mostrarZonaTranquila = true;
 
     private Handler handlerAlertas = new Handler();
     private Runnable runnableAlertas;
@@ -136,10 +142,28 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         btnGuardarRuta = root.findViewById(R.id.btnGuardarRuta);
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(requireActivity());
 
-
-
         Spinner spinnerModo = root.findViewById(R.id.spinnerModo);
         Spinner spinnerIdiomas = root.findViewById(R.id.spinnerIdiomas);
+
+        // --- Configuración del Spinner de Filtro ---
+        Spinner spinnerFiltro = root.findViewById(R.id.spinnerFiltro);
+        ArrayAdapter<CharSequence> adapterFiltro = ArrayAdapter.createFromResource(requireContext(),
+                R.array.filtro_riesgo_array, android.R.layout.simple_spinner_item);
+        adapterFiltro.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerFiltro.setAdapter(adapterFiltro);
+
+        spinnerFiltro.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                filtroRiesgo = position;
+                dibujarReportesEnMapa();
+            }
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                filtroRiesgo = 0;
+            }
+        });
+        // --- Fin Spinner Filtro ---
 
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map);
         if (mapFragment != null) {
@@ -206,7 +230,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         btnCompartir.setOnClickListener(v -> {
             if (origenLatLng != null && destinoLatLng != null) {
-                String urlMaps = "https://www.google.com/maps/dir/?api=1" +
+                String urlMaps = "http://googleusercontent.com/maps/google.com/0" +
                         "&origin=" + origenLatLng.latitude + "," + origenLatLng.longitude +
                         "&destination=" + destinoLatLng.latitude + "," + destinoLatLng.longitude +
                         "&travelmode=" + modoTransporte;
@@ -226,20 +250,68 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         });
 
+        // 🔹 CORRECCIÓN 2 (GUARDAR RUTA) 🔹
+        // Se reemplazó el listener anterior y se movió la lógica de guardado aquí.
+        // Ya no usamos el método `guardarRutaEnHistorial()` separado.
         btnGuardarRuta.setOnClickListener(v -> {
-            if (origenLatLng != null && destinoLatLng != null && origenNombre != null && destinoNombre != null) {
-                guardarRutaEnHistorial();
+            // Verificamos que el contexto (fragmento) aún exista
+            if (getContext() == null || !isAdded()) {
+                return;
+            }
+
+            // Obtenemos los nombres *directamente* de los campos de texto
+            String nombreOrigen = etOrigen.getText().toString();
+            String nombreDestino = etDestino.getText().toString();
+
+            // Validamos que tengamos coordenadas Y que los campos de texto no estén vacíos
+            if (origenLatLng != null && destinoLatLng != null &&
+                    !nombreOrigen.isEmpty() && !nombreDestino.isEmpty()) {
+
+                // --- Lógica de guardado (antes en guardarRutaEnHistorial) ---
+                FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
+                if (user == null) {
+                    Toast.makeText(getContext(), getString(R.string.historial_no_login), Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                String uid = user.getUid();
+
+                HistorialRuta nuevaRuta = new HistorialRuta(
+                        uid,
+                        nombreOrigen,  // Usamos el texto del campo
+                        nombreDestino, // Usamos el texto del campo
+                        origenLatLng.latitude,
+                        origenLatLng.longitude,
+                        destinoLatLng.latitude,
+                        destinoLatLng.longitude,
+                        new Timestamp(new Date())
+                );
+
+                db.collection("historialRutas")
+                        .add(nuevaRuta)
+                        .addOnSuccessListener(documentReference -> {
+                            if (getContext() != null && isAdded()) {
+                                Toast.makeText(getContext(), getString(R.string.historial_ruta_guardada), Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .addOnFailureListener(e -> {
+                            if (getContext() != null && isAdded()) {
+                                Toast.makeText(getContext(), getString(R.string.historial_error_guardar), Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                // --- Fin de la lógica de guardado ---
+
             } else {
                 Toast.makeText(requireContext(), getString(R.string.historial_selecciona_ruta), Toast.LENGTH_SHORT).show();
             }
         });
+        // --- FIN DE LA CORRECCIÓN 2 ---
 
 
         actualizarTextosUI();
         solicitarPermisoNotificaciones();
         notificacionesZonas = new Notificaciones_Zonas(requireContext());
 
-        intervaloEnvio = notificacionesZonas.getIntervaloAlertas(); // ← aquí se usa realmente
+        intervaloEnvio = notificacionesZonas.getIntervaloAlertas();
         intervaloNotificacion = intervaloEnvio;
 
         iniciarAlertasZonas();
@@ -247,38 +319,21 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     }
 
 
+    // 🔹 CORRECCIÓN 2 (GUARDAR RUTA) 🔹
+    // Este método ya no es necesario, su lógica se movió al OnClickListener del botón.
+    // private void guardarRutaEnHistorial() { ... }
 
-
-
-    private void guardarRutaEnHistorial() {
-        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
-        if (user == null) {
-            Toast.makeText(getContext(), getString(R.string.historial_no_login), Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String uid = user.getUid();
-
-        HistorialRuta nuevaRuta = new HistorialRuta(
-                uid,
-                origenNombre,
-                destinoNombre,
-                origenLatLng.latitude,
-                origenLatLng.longitude,
-                destinoLatLng.latitude,
-                destinoLatLng.longitude,
-                new Timestamp(new Date())
-        );
-
-        db.collection("historialRutas")
-                .add(nuevaRuta)
-                .addOnSuccessListener(documentReference -> Toast.makeText(getContext(), getString(R.string.historial_ruta_guardada), Toast.LENGTH_SHORT).show())
-                .addOnFailureListener(e -> Toast.makeText(getContext(), getString(R.string.historial_error_guardar), Toast.LENGTH_SHORT).show());
-    }
 
     private void iniciarEnvioUbicacion() {
         runnable = new Runnable() {
             @Override
             public void run() {
+                // Verificación de seguridad (Crash Fix)
+                if (getContext() == null || !isAdded()) {
+                    handler.postDelayed(this, intervaloEnvio);
+                    return;
+                }
+
                 if (ActivityCompat.checkSelfPermission(requireContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                     return;
                 }
@@ -342,29 +397,32 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         cargarReportesDesdeFirestore();
 
-        // --- 🔹 CAMBIO CLAVE: Comprobar si vienen datos del historial ---
         if (getArguments() != null && getArguments().containsKey("origenLat")) {
             Bundle args = getArguments();
             origenLatLng = new LatLng(args.getDouble("origenLat"), args.getDouble("origenLng"));
             destinoLatLng = new LatLng(args.getDouble("destinoLat"), args.getDouble("destinoLng"));
+            // Usamos las variables de clase para los nombres, que SÍ se reciben del historial
             origenNombre = args.getString("origenNombre");
             destinoNombre = args.getString("destinoNombre");
 
-            // Rellenar los campos de texto
             etOrigen.setText(origenNombre);
             etDestino.setText(destinoNombre);
 
-            // Dibujar la ruta automáticamente
-            // Usamos un Handler para asegurar que el mapa esté completamente listo
             new Handler().postDelayed(() -> {
                 if (mMap != null) {
                     btnCalcularRuta.performClick();
                 }
-            }, 500); // 500ms de espera
+            }, 500);
         }
 
-        mMap.setOnMapClickListener(latLng -> {
+        // Clic largo para reportar
+        mMap.setOnMapLongClickListener(latLng -> {
             String nombreLugar = getString(R.string.ubicacion_desconocida);
+
+            if (getContext() == null || !isAdded()) {
+                return;
+            }
+
             try {
                 Geocoder geocoder = new Geocoder(requireContext(), new Locale(idiomaSeleccionado));
                 List<Address> addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1);
@@ -378,9 +436,13 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             bundle.putDouble("lng", latLng.longitude);
             bundle.putString("nombreLugar", nombreLugar);
 
-            NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment_content_contenido_general);
-            navController.navigate(R.id.nav_gallery, bundle);
+            if (getActivity() != null) {
+                NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment_content_contenido_general);
+                navController.navigate(R.id.nav_gallery, bundle);
+            }
         });
+
+        mMap.setOnMapClickListener(null);
     }
 
     private void setAutocomplete(AutoCompleteTextView editText, boolean esOrigen) {
@@ -391,12 +453,26 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                if (s.toString().isEmpty()) return;
+                if (s.toString().isEmpty()) {
+                    // Si el texto se borra, reseteamos las variables
+                    if (esOrigen) {
+                        origenLatLng = null;
+                        origenNombre = null;
+                    } else {
+                        destinoLatLng = null;
+                        destinoNombre = null;
+                    }
+                    return;
+                }
 
                 FindAutocompletePredictionsRequest request = FindAutocompletePredictionsRequest.builder()
                         .setQuery(s.toString()).setSessionToken(AutocompleteSessionToken.newInstance()).setCountries("PE").build();
 
                 placesClient.findAutocompletePredictions(request).addOnSuccessListener(response -> {
+                    if (getContext() == null || !isAdded()) {
+                        return;
+                    }
+
                     List<String> sugerencias = new ArrayList<>();
                     List<String> placeIds = new ArrayList<>();
                     for (AutocompletePrediction prediction : response.getAutocompletePredictions()) {
@@ -406,19 +482,23 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                     ArrayAdapter<String> adapter = new ArrayAdapter<>(requireContext(), android.R.layout.simple_dropdown_item_1line, sugerencias);
                     editText.setAdapter(adapter);
                     adapter.notifyDataSetChanged();
+
                     editText.setOnItemClickListener((parent, view, position, id) -> {
                         String placeId = placeIds.get(position);
                         List<Place.Field> fields = Arrays.asList(Place.Field.LAT_LNG, Place.Field.NAME);
                         FetchPlaceRequest placeRequest = FetchPlaceRequest.newInstance(placeId, fields);
+
                         placesClient.fetchPlace(placeRequest).addOnSuccessListener(fetchResponse -> {
                             Place place = fetchResponse.getPlace();
                             String toastMessage;
                             if (esOrigen) {
                                 origenLatLng = place.getLatLng();
+                                // Aquí SÍ guardamos el nombre en la variable de clase
                                 origenNombre = place.getName();
                                 toastMessage = getString(R.string.origen_fijado, place.getName());
                             } else {
                                 destinoLatLng = place.getLatLng();
+                                // Aquí SÍ guardamos el nombre en la variable de clase
                                 destinoNombre = place.getName();
                                 toastMessage = getString(R.string.destino_fijado, place.getName());
                             }
@@ -432,32 +512,81 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     private void cargarReportesDesdeFirestore() {
         db.collection("reportes").addSnapshotListener((snapshots, e) -> {
-            if (e != null) { return; }
+            if (e != null || getContext() == null || !isAdded()) {
+                return;
+            }
+
             listaDeReportes.clear();
             for (QueryDocumentSnapshot doc : snapshots) {
                 listaDeReportes.add(doc.toObject(Reporte.class));
             }
-            if (mMap != null) { dibujarReportesEnMapa(); }
+            if (mMap != null) {
+                dibujarReportesEnMapa();
+            }
         });
     }
 
     private void dibujarReportesEnMapa() {
         if (mMap == null) return;
+
         for (Circle circle : circleReportesActuales) { circle.remove(); }
         circleReportesActuales.clear();
+        for (Marker marker : markerReportesActuales) { marker.remove(); }
+        markerReportesActuales.clear();
+
         for (Reporte reporte : listaDeReportes) {
-            int color;
-            switch (reporte.getRiesgo()) {
-                case 1: color = Color.parseColor("#5533FF33"); break;
-                case 2: color = Color.parseColor("#55FFA500"); break;
-                default: color = Color.parseColor("#55FF3333"); break;
+
+            if (filtroRiesgo != 0 && reporte.getRiesgo() != filtroRiesgo) {
+                continue;
             }
-            Circle circle = mMap.addCircle(new CircleOptions().center(new LatLng(reporte.getLat(), reporte.getLng())).radius(75).strokeWidth(0).fillColor(color));
+
+            int color;
+            float hue;
+            String riesgoStr;
+
+            switch (reporte.getRiesgo()) {
+                case 1:
+                    color = Color.parseColor("#5533FF33"); // Verde
+                    hue = BitmapDescriptorFactory.HUE_GREEN;
+                    riesgoStr = getString(R.string.riesgo_seguro);
+                    break;
+                case 2:
+                    color = Color.parseColor("#55FFA500"); // Naranja
+                    hue = BitmapDescriptorFactory.HUE_ORANGE;
+                    riesgoStr = getString(R.string.riesgo_moderado);
+                    break;
+                default:
+                    color = Color.parseColor("#55FF3333"); // Rojo
+                    hue = BitmapDescriptorFactory.HUE_RED;
+                    riesgoStr = getString(R.string.riesgo_inseguro);
+                    break;
+            }
+
+            Circle circle = mMap.addCircle(new CircleOptions()
+                    .center(new LatLng(reporte.getLat(), reporte.getLng()))
+                    .radius(75)
+                    .strokeWidth(0)
+                    .fillColor(color)
+                    .clickable(false));
+
             circleReportesActuales.add(circle);
+
+            Marker marker = mMap.addMarker(new MarkerOptions()
+                    .position(new LatLng(reporte.getLat(), reporte.getLng()))
+                    .title(riesgoStr + ": " + reporte.getNombreLugar())
+                    .snippet(reporte.getDescripcion())
+                    .icon(BitmapDescriptorFactory.defaultMarker(hue)));
+
+            markerReportesActuales.add(marker);
         }
     }
 
     private void calcularRutas(LatLng origen, LatLng destino) {
+        // Verificación de seguridad
+        if (getContext() == null || !isAdded()) {
+            return;
+        }
+
         String url = "https://maps.googleapis.com/maps/api/directions/json?" +
                 "origin=" + origen.latitude + "," + origen.longitude +
                 "&destination=" + destino.latitude + "," + destino.longitude +
@@ -468,11 +597,19 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         RequestQueue queue = Volley.newRequestQueue(requireContext());
         JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, url, null, this::procesarRespuestaDeRutas,
-                error -> Toast.makeText(getContext(), "Error: " + error.getMessage(), Toast.LENGTH_LONG).show());
+                error -> {
+                    if (getContext() != null && isAdded()) {
+                        Toast.makeText(getContext(), "Error: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
         queue.add(request);
     }
 
     private void procesarRespuestaDeRutas(JSONObject response) {
+        if (getContext() == null || !isAdded()) {
+            return;
+        }
+
         try {
             if (!response.getString("status").equals("OK")) {
                 Toast.makeText(getContext(), getString(R.string.no_se_encontraron_rutas), Toast.LENGTH_SHORT).show();
@@ -495,10 +632,13 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 JSONObject leg = route.getJSONArray("legs").getJSONObject(0);
                 long distanciaActual = leg.getJSONObject("distance").getLong("value");
 
+                // Lógica de Ruta más Corta (sin cambios, ya era correcta)
                 if (distanciaActual < menorDistancia) {
                     menorDistancia = distanciaActual;
                     rutaMasCortaIndex = i;
                 }
+
+                // Lógica de Ruta más Segura (con puntaje modificado)
                 List<LatLng> puntos = decodePolyline(route.getJSONObject("overview_polyline").getString("points"));
                 int puntajeRiesgo = calcularPuntajeRiesgo(puntos);
                 if (puntajeRiesgo < mejorPuntajeRiesgo) {
@@ -530,30 +670,44 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
+    // 🔹 CORRECCIÓN 3 (RUTA SEGURA) 🔹
+    // Se modificaron las penalizaciones para que la Ruta Segura
+    // evite activamente las zonas de Riesgo 3.
     private int calcularPuntajeRiesgo(List<LatLng> puntos) {
         int puntajeRiesgo = 0;
         for (LatLng punto : puntos) {
             for (Reporte reporte : listaDeReportes) {
                 float[] distancia = new float[1];
                 Location.distanceBetween(punto.latitude, punto.longitude, reporte.getLat(), reporte.getLng(), distancia);
-                if (distancia[0] < 75) {
-                    if (reporte.getRiesgo() == 2) puntajeRiesgo += 1;
-                    if (reporte.getRiesgo() == 3) puntajeRiesgo += 5;
+
+                if (distancia[0] < 75) { // Si un punto de la ruta está dentro de los 75m de un reporte
+                    switch (reporte.getRiesgo()) {
+                        // case 1 (Seguro): Añade 0 puntos. (Preferido)
+                        case 2: // Moderado
+                            puntajeRiesgo += 5; // Penalización baja
+                            break;
+                        case 3: // Inseguro
+                            puntajeRiesgo += 1000; // Penalización MUY ALTA
+                            break;
+                    }
                 }
             }
         }
         return puntajeRiesgo;
     }
+    // --- FIN DE LA CORRECCIÓN 3 ---
 
     private void dibujarRuta(List<LatLng> puntos, int color, float ancho, String tag) {
         if (mMap == null) return;
         Polyline polyline = mMap.addPolyline(new PolylineOptions().addAll(puntos).color(color).width(ancho).clickable(true));
         polyline.setTag(tag);
+        // 🔹 CORRECCIÓN 1 (TYPO) 🔹
         polylinesActuales.add(polyline);
     }
 
     private void limpiarRutasYMarcadores() {
         if (mMap == null) return;
+        // 🔹 CORRECCIÓN 1 (TYPO) 🔹
         for (Polyline polyline : polylinesActuales) { polyline.remove(); }
         polylinesActuales.clear();
         for (Marker marker : markersActuales) { marker.remove(); }
@@ -589,6 +743,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         runnableAlertas = new Runnable() {
             @Override
             public void run() {
+                if (getContext() == null || !isAdded()) {
+                    handlerAlertas.postDelayed(this, intervaloNotificacion);
+                    return;
+                }
+
                 if (!notificacionesActivadas) {
                     handlerAlertas.postDelayed(this, intervaloNotificacion);
                     return;
@@ -599,6 +758,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 }
 
                 fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
+                    if (getContext() == null || !isAdded()) {
+                        return;
+                    }
+
                     if (location != null && System.currentTimeMillis() - ultimaNotificacion >= intervaloNotificacion) {
                         ultimaNotificacion = System.currentTimeMillis();
 
@@ -620,21 +783,21 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                                 switch (reporte.getRiesgo()) {
                                     case 1:
                                         notificacionesZonas.mostrarNotificacion(
-                                                "Zona segura",
+                                                getString(R.string.riesgo_seguro),
                                                 "Te encuentras en una zona verde. Sin riesgos.",
                                                 Color.GREEN
                                         );
                                         break;
                                     case 2:
                                         notificacionesZonas.mostrarNotificacion(
-                                                "Zona de precaución",
+                                                getString(R.string.riesgo_moderado),
                                                 "Zona amarilla detectada. Mantente alerta.",
                                                 Color.YELLOW
                                         );
                                         break;
                                     case 3:
                                         notificacionesZonas.mostrarNotificacion(
-                                                "Zona peligrosa",
+                                                getString(R.string.riesgo_inseguro),
                                                 "¡Estás en una zona roja! Evita permanecer aquí.",
                                                 Color.RED
                                         );
@@ -662,7 +825,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     }
 
     private void solicitarPermisoNotificaciones() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) { // Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(
@@ -685,9 +848,4 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         }
     }
-
-
-
-
 }
-

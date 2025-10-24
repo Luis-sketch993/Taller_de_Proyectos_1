@@ -38,6 +38,20 @@
     <string name="historial_origen_label">Origen:</string>
     <string name="historial_destino_label">Destino:</string>
 
+
+    <string name="menu_logout">Cerrar Sesión</string>
+
+    <string name="riesgo_seguro">Zona Segura</string>
+    <string name="riesgo_moderado">Riesgo Moderado</string>
+    <string name="riesgo_inseguro">Zona Insegura</string>
+
+    <string-array name="filtro_riesgo_array">
+        <item>Mostrar Todos</item>
+        <item>Seguro</item>
+        <item>Riesgo Moderado</item>
+        <item>Inseguro</item>
+    </string-array>
+
     <string-array name="modos_transporte">
         <item>Carro</item>
         <item>A pie</item>
