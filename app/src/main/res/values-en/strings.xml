@@ -12,7 +12,6 @@
     <string name="menu_gallery">Report</string>
     <string name="menu_slideshow">History</string>
 
-    <!-- Texts for HomeFragment -->
     <string name="hint_origen">Origin Point</string>
     <string name="hint_destino">Destination Point</string>
     <string name="boton_calcular_ruta">Calculate Route</string>
@@ -28,7 +27,6 @@
     <string name="no_se_encontraron_rutas">No routes were found.</string>
     <string name="ubicacion_desconocida">Unknown Location</string>
 
-    <!-- Texts for History -->
     <string name="historial_ruta_guardada">Route saved to history</string>
     <string name="historial_error_guardar">Error saving route</string>
     <string name="historial_no_login">Log in to see your history</string>
@@ -38,13 +36,20 @@
     <string name="historial_origen_label">Origin:</string>
     <string name="historial_destino_label">Destination:</string>
 
-
     <string name="menu_logout">Logout</string>
-
     <string name="riesgo_seguro">Safe Zone</string>
     <string name="riesgo_moderado">Moderate Risk</string>
     <string name="riesgo_inseguro">Unsafe Zone</string>
 
+    <string name="menu_contactos">Emergency Contacts</string>
+    <string name="panic_button_content_desc">Panic Button</string>
+    <string name="sms_permission_denied">SMS permission denied. Cannot send alert.</string>
+    <string name="sms_permission_granted">SMS permission granted.</string>
+    <string name="panic_obteniendo_ubicacion">Getting location for alert...</string>
+    <string name="panic_error_ubicacion">Could not get location. Try again.</string>
+    <string name="panic_no_contacts">No emergency contacts. Please add one in the \'Contacts\' section.</string>
+    <string name="panic_sms_enviado">Panic alert sent!</string>
+    <string name="panic_sms_error">Error sending SMS. Check the number.</string>
     <string-array name="filtro_riesgo_array">
         <item>Show All</item>
         <item>Safe</item>
@@ -63,4 +68,3 @@
         <item>English</item>
     </string-array>
 </resources>
-

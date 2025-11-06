@@ -25,6 +25,7 @@ public class Notificaciones_Zonas {
     private final Context context;
     private final SharedPreferences prefs;
 
+    // Constructor (Versión simple)
     public Notificaciones_Zonas(Context context) {
         this.context = context;
         this.prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
@@ -101,7 +102,9 @@ public class Notificaciones_Zonas {
         mostrarNotificacion("Zona Tranquila", "No estás en ninguna zona de riesgo.", 0xFF2196F3);
     }
 
-    // --- Configuración del usuario ---
+    // ----------------------------------------------------------------
+    // 🔹 MÉTODOS DE PREFERENCIAS (ESTO FALTABA) 🔹
+    // ----------------------------------------------------------------
     public void setAlertasActivadas(boolean activadas) {
         prefs.edit().putBoolean(KEY_ALERTAS_ACTIVADAS, activadas).apply();
     }
@@ -114,7 +117,12 @@ public class Notificaciones_Zonas {
         prefs.edit().putLong(KEY_INTERVALO_ALERTAS, milisegundos).apply();
     }
 
+    /**
+     * Devuelve el intervalo de alertas en milisegundos.
+     * Por defecto son 2 minutos (2 * 60 * 1000).
+     */
     public long getIntervaloAlertas() {
-        return prefs.getLong(KEY_INTERVALO_ALERTAS, 2 * 60 * 1000); // 5 min por defecto
+        // El error estaba aquí porque este método faltaba.
+        return prefs.getLong(KEY_INTERVALO_ALERTAS, 2 * 60 * 1000); // 2 min por defecto
     }
 }

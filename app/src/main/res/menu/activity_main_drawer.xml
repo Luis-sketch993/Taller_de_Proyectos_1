@@ -16,6 +16,12 @@
             android:id="@+id/nav_slideshow"
             android:icon="@drawable/ic_menu_slideshow"
             android:title="@string/menu_slideshow" />
+
+        <item
+            android:id="@+id/nav_contactos"
+            android:icon="@android:drawable/ic_menu_camera"
+            android:title="@string/menu_contactos" />
+
     </group>
 
     <group android:id="@+id/group_sesion">
@@ -24,5 +30,4 @@
             android:icon="@android:drawable/ic_lock_power_off"
             android:title="@string/menu_logout" />
     </group>
-
 </menu>

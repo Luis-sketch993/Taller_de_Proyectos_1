@@ -12,7 +12,6 @@
     <string name="menu_gallery">Reportar</string>
     <string name="menu_slideshow">Historial</string>
 
-    <!-- Textos para HomeFragment -->
     <string name="hint_origen">Punto de Origen</string>
     <string name="hint_destino">Punto de Destino</string>
     <string name="boton_calcular_ruta">Calcular Ruta</string>
@@ -28,9 +27,10 @@
     <string name="no_se_encontraron_rutas">No se encontraron rutas.</string>
     <string name="ubicacion_desconocida">Ubicación desconocida</string>
 
-    <!-- Textos para Historial -->
     <string name="historial_ruta_guardada">Ruta guardada en el historial</string>
+
     <string name="historial_error_guardar">Error al guardar la ruta</string>
+
     <string name="historial_no_login">Inicia sesión para ver tu historial</string>
     <string name="historial_selecciona_ruta">Primero calcula una ruta para guardarla</string>
     <string name="historial_vacio">Tu historial de rutas está vacío.</string>
@@ -38,12 +38,22 @@
     <string name="historial_origen_label">Origen:</string>
     <string name="historial_destino_label">Destino:</string>
 
-
     <string name="menu_logout">Cerrar Sesión</string>
-
     <string name="riesgo_seguro">Zona Segura</string>
     <string name="riesgo_moderado">Riesgo Moderado</string>
     <string name="riesgo_inseguro">Zona Insegura</string>
+
+    <string name="menu_contactos">Contactos de Emergencia</string>
+    <string name="panic_button_content_desc">Botón de Pánico</string>
+    <string name="sms_permission_denied">Permiso de SMS denegado. No se puede enviar alerta.</string>
+    <string name="sms_permission_granted">Permiso de SMS concedido.</string>
+    <string name="panic_obteniendo_ubicacion">Obteniendo ubicación para alerta...</string>
+    <string name="panic_error_ubicacion">No se pudo obtener la ubicación. Intente de nuevo.</string>
+
+    <string name="panic_no_contacts">No hay contactos de emergencia. Por favor, agregue uno en la sección \'Contactos\'.</string>
+
+    <string name="panic_sms_enviado">¡Alerta de pánico enviada!</string>
+    <string name="panic_sms_error">Error al enviar SMS. Verifique el número.</string>
 
     <string-array name="filtro_riesgo_array">
         <item>Mostrar Todos</item>
@@ -62,5 +72,5 @@
         <item>Español</item>
         <item>English</item>
     </string-array>
-</resources>
 
+</resources>

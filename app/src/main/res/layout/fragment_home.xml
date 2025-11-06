@@ -1,119 +1,131 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical">
-
-    <!-- 🔹 Selector de idioma -->
-    <Spinner
-        android:id="@+id/spinnerIdiomas"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_margin="8dp"
-        android:spinnerMode="dropdown" />
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="3dp"
-        android:background="@android:color/white">
+        android:layout_height="match_parent"
+        android:orientation="vertical">
 
-        <AutoCompleteTextView
-            android:id="@+id/etOrigen"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Punto de Origen"
-            android:drawableLeft="@android:drawable/ic_menu_mylocation"
-            android:padding="8dp"
-            android:layout_marginBottom="6dp"
-            android:background="@android:drawable/edit_text" />
-
-        <AutoCompleteTextView
-            android:id="@+id/etDestino"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Punto de Destino"
-            android:drawableLeft="@android:drawable/ic_menu_directions"
-            android:padding="8dp"
-            android:background="@android:drawable/edit_text" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@android:color/white"
-        android:orientation="horizontal"
-        android:padding="3dp">
-
-        <!-- Filtro de información -->
         <Spinner
-            android:id="@+id/spinnerFiltro"
-            android:layout_width="0dp"
-            android:layout_weight="1"
-            android:layout_height="wrap_content"
-            android:spinnerMode="dropdown" />
-
-        <!-- Selector de modo de transporte -->
-        <Spinner
-            android:id="@+id/spinnerModo"
+            android:id="@+id/spinnerIdiomas"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_margin="8dp"
             android:spinnerMode="dropdown" />
-
-        <!-- Botón para calcular ruta -->
-        <Button
-            android:id="@+id/btnCalcularRuta"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Calcular Ruta" />
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:padding="3dp"
+            android:background="@android:color/white">
 
-            <Button
-                android:id="@+id/btnGuardarRuta"
+            <AutoCompleteTextView
+                android:id="@+id/etOrigen"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Punto de Origen"
+                android:drawableLeft="@android:drawable/ic_menu_mylocation"
+                android:padding="8dp"
+                android:layout_marginBottom="6dp"
+                android:background="@android:drawable/edit_text" />
+
+            <AutoCompleteTextView
+                android:id="@+id/etDestino"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="Punto de Destino"
+                android:drawableLeft="@android:drawable/ic_menu_directions"
+                android:padding="8dp"
+                android:background="@android:drawable/edit_text" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:color/white"
+            android:orientation="horizontal"
+            android:padding="3dp">
+
+            <Spinner
+                android:id="@+id/spinnerFiltro"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:spinnerMode="dropdown" />
+
+            <Spinner
+                android:id="@+id/spinnerModo"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Guardar Ruta"/>
+                android:spinnerMode="dropdown" />
 
             <Button
-                android:id="@+id/btnCompartir"
+                android:id="@+id/btnCalcularRuta"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Compartir Ubi."
-                android:layout_marginBottom="4dp"/>
+                android:text="Calcular Ruta" />
 
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
 
+                <Button
+                    android:id="@+id/btnGuardarRuta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Guardar Ruta"/>
+
+                <Button
+                    android:id="@+id/btnCompartir"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Compartir Ubi."
+                    android:layout_marginBottom="4dp"/>
+            </LinearLayout>
 
         </LinearLayout>
 
+        <TextView
+            android:id="@+id/tvTiempo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@android:color/white"
+            android:padding="8dp"
+            android:text="Tiempo estimado: "
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <FrameLayout
+            android:id="@+id/mapContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <fragment
+                android:id="@+id/map"
+                android:name="com.google.android.gms.maps.SupportMapFragment"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </FrameLayout>
+
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/tvTiempo"
-        android:layout_width="match_parent"
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fab_panic"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="@android:color/white"
-        android:padding="8dp"
-        android:text="Tiempo estimado: "
-        android:textSize="16sp"
-        android:textStyle="bold" />
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="24dp"
+        android:src="@android:drawable/ic_notification_overlay"
+        app:backgroundTint="@android:color/holo_red_dark"
+        app:tint="@android:color/white"
+        android:contentDescription="@string/panic_button_content_desc" />
 
-    <FrameLayout
-        android:id="@+id/mapContainer"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <fragment
-            android:id="@+id/map"
-            android:name="com.google.android.gms.maps.SupportMapFragment"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-    </FrameLayout>
-
-</LinearLayout>
+</RelativeLayout>
