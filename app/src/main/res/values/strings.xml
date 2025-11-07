@@ -8,6 +8,17 @@
     <string name="nav_header_desc">Encabezado de navegación</string>
     <string name="action_settings">Ajustes</string>
 
+    <string name="confirmacion_dialog_titulo">Validar Reporte en %1$s</string>
+    <string name="confirmacion_dialog_mensaje_actual">Confirmaciones: %1$d\nDenuncias: %2$d</string>
+    <string name="confirmar_reporte">Confirmar Reporte</string>
+    <string name="denunciar_falso">Denunciar como Falso</string>
+    <string name="cancelar">Cancelar</string>
+    <string name="error_votacion_login">Inicia sesión para votar.</string>
+    <string name="votacion_gracias">Gracias por tu voto. Se actualizará en breve.</string>
+    <string name="votacion_error">Error al procesar el voto. Intenta de nuevo.</string>
+    <string name="reporte_verificado">¡Reporte Verificado! Es más visible ahora.</string>
+    <string name="reporte_falso_eliminado">Reporte denunciado y eliminado del mapa.</string>
+
     <string name="menu_home">Mapa</string>
     <string name="menu_gallery">Reportar</string>
     <string name="menu_slideshow">Historial</string>

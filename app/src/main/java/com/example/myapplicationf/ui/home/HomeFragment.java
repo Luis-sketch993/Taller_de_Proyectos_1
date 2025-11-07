@@ -88,6 +88,14 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.Transaction;
+import java.util.Map;
+import java.util.HashMap;
+
+
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
@@ -462,6 +470,25 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         });
 
+        // 🚨 CÓDIGO AÑADIDO PARA LA HU-29: Votación en Marcadores
+        mMap.setOnMarkerClickListener(marker -> {
+            // Buscar el reporte asociado a este marcador
+            Reporte reporteSeleccionado = null;
+            for (Reporte r : listaDeReportes) {
+                if (marker.getPosition().latitude == r.getLat() && marker.getPosition().longitude == r.getLng()) {
+                    reporteSeleccionado = r;
+                    break;
+                }
+            }
+
+            if (reporteSeleccionado != null && reporteSeleccionado.getId() != null) {
+                // Mostrar el diálogo de confirmación/denuncia
+                mostrarDialogoConfirmacion(reporteSeleccionado);
+            }
+            // Devolvemos false para permitir que se siga mostrando la InfoWindow normal
+            return false;
+        });
+
         mMap.setOnMapClickListener(null);
     }
 
@@ -529,19 +556,43 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     private void cargarReportesDesdeFirestore() {
         db.collection("reportes").addSnapshotListener((snapshots, e) -> {
+            // Si hay error o el fragmento ya no está activo, no hacer nada
             if (e != null || mContext == null || !isAdded()) {
                 return;
             }
 
-            listaDeReportes.clear();
-            for (QueryDocumentSnapshot doc : snapshots) {
-                listaDeReportes.add(doc.toObject(Reporte.class));
+            // Si no hay datos, salir
+            if (snapshots == null) {
+                return;
             }
-            if (mMap != null) {
+
+            listaDeReportes.clear();
+
+            for (QueryDocumentSnapshot doc : snapshots) {
+                Reporte reporte = doc.toObject(Reporte.class);
+                if (reporte == null) continue;
+
+                // 🔥 Aseguramos que cada reporte tenga su ID
+                reporte.setId(doc.getId());
+
+                // 🧩 Aseguramos un valor por defecto para el estado
+                if (reporte.getEstado() == null || reporte.getEstado().trim().isEmpty()) {
+                    reporte.setEstado("Pendiente");
+                }
+
+                // 🚨 Filtrar los reportes marcados como "Falso"
+                if (!"Falso".equalsIgnoreCase(reporte.getEstado())) {
+                    listaDeReportes.add(reporte);
+                }
+            }
+
+            // 🗺️ Redibujar reportes en el mapa si está disponible
+            if (mMap != null && !listaDeReportes.isEmpty()) {
                 dibujarReportesEnMapa();
             }
         });
     }
+
 
     private void dibujarReportesEnMapa() {
         if (mMap == null) return;
@@ -924,4 +975,76 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         }
     }
+
+    // 🚨 CÓDIGO ACTUALIZADO: Diálogo para Confirmar o Denunciar un reporte
+    private void mostrarDialogoConfirmacion(Reporte reporte) {
+        if (mContext == null || !isAdded()) return;
+
+        String mensajeActual = getString(R.string.confirmacion_dialog_mensaje_actual,
+                reporte.getConfirmaciones(),
+                reporte.getDenuncias());
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        builder.setTitle(getString(R.string.confirmacion_dialog_titulo, reporte.getNombreLugar()))
+                .setMessage(reporte.getDescripcion() + "\n\n" + mensajeActual)
+                .setPositiveButton(R.string.confirmar_reporte, (dialog, id) -> {
+                    votarPorReporte(reporte, true); // Vota TRUE (confirmar)
+                })
+                .setNegativeButton(R.string.denunciar_falso, (dialog, id) -> {
+                    votarPorReporte(reporte, false); // Vota FALSE (denunciar)
+                })
+                .setNeutralButton(R.string.cancelar, (dialog, id) -> dialog.dismiss());
+
+        builder.create().show();
+    }
+
+    // 🚨 CÓDIGO ACTUALIZADO: Lógica de Votación y Transacción en Firestore
+    private void votarPorReporte(Reporte reporte, boolean confirmar) {
+        if (userId == null || reporte.getId() == null) {
+            Toast.makeText(mContext, getString(R.string.error_votacion_login), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        DocumentReference reporteRef = db.collection("reportes").document(reporte.getId());
+
+        db.runTransaction(transaction -> {
+            DocumentSnapshot snapshot = transaction.get(reporteRef);
+
+            // Obtenemos valores actuales
+            long confirmaciones = snapshot.getLong("confirmaciones") != null ? snapshot.getLong("confirmaciones") : 0;
+            long denuncias = snapshot.getLong("denuncias") != null ? snapshot.getLong("denuncias") : 0;
+            String estado = snapshot.getString("estado");
+
+            // Aplica el voto
+            if (confirmar) {
+                confirmaciones++;
+            } else {
+                denuncias++;
+            }
+
+            // Aplica reglas de verificación automática
+            if (confirmaciones >= 5 && confirmaciones > denuncias) {
+                estado = "Verificado";
+            } else if (denuncias >= 10 && denuncias > confirmaciones) {
+                estado = "Falso";
+            } else {
+                estado = "Pendiente"; // sigue igual mientras no se cumpla una regla
+            }
+
+            // Actualiza Firestore
+            Map<String, Object> updates = new HashMap<>();
+            updates.put("confirmaciones", confirmaciones);
+            updates.put("denuncias", denuncias);
+            updates.put("estado", estado);
+
+            transaction.update(reporteRef, updates);
+            return null;
+        }).addOnSuccessListener(aVoid -> {
+            Toast.makeText(mContext, getString(R.string.votacion_gracias), Toast.LENGTH_SHORT).show();
+            cargarReportesDesdeFirestore(); // Refresca la interfaz
+        }).addOnFailureListener(e -> {
+            Toast.makeText(mContext, getString(R.string.votacion_error), Toast.LENGTH_SHORT).show();
+        });
+    }
+
 }
