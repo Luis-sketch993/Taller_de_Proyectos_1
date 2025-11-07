@@ -2,7 +2,7 @@ package com.example.myapplicationf.ui.home;
 
 // Imports para Pánico y SMS
 import android.content.DialogInterface;
-import android.telephony.SmsManager;
+// import android.telephony.SmsManager; // Ya no se usa, lo quitamos
 import androidx.appcompat.app.AlertDialog;
 import com.example.myapplicationf.Models.ContactoEmergencia;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
@@ -17,6 +17,9 @@ import com.google.firebase.auth.FirebaseUser;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Handler;
+
+// ⭐️ --- IMPORTACIÓN AÑADIDA PARA EL INTENT DE SMS --- ⭐️
+import android.net.Uri;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -93,11 +96,11 @@ import com.google.firebase.firestore.Transaction;
 import java.util.Map;
 import java.util.HashMap;
 
-// ⭐️ --- IMPORTACIONES NUEVAS PARA CALIFICACIONES --- ⭐️
+// ⭐️ --- IMPORTACIONES PARA CALIFICACIONES --- ⭐️
 import com.example.myapplicationf.Models.CalificacionZona;
 import android.widget.RatingBar;
 import android.widget.LinearLayout;
-// ⭐️ --- FIN DE IMPORTACIONES NUEVAS --- ⭐️
+// ⭐️ --- FIN DE IMPORTACIONES --- ⭐️
 
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
@@ -116,10 +119,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private Notificaciones_Zonas notificacionesZonas;
     private static final int REQUEST_NOTIFICATION_PERMISSION = 1001;
 
-    // Variables para Botón de Pánico y SMS
-    private static final int REQUEST_SMS_PERMISSION = 1002;
-    // ⭐️ CÓDIGO AÑADIDO PARA EL PERMISO DE UBICACIÓN DE PÁNICO ⭐️
-    private static final int REQUEST_PANIC_LOCATION_PERMISSION = 1003;
+    // Variables para Botón de Pánico
+    // private static final int REQUEST_SMS_PERMISSION = 1002; // Ya no se usa
+    private static final int REQUEST_PANIC_LOCATION_PERMISSION = 1003; // Para la ubicación de pánico
     private FirebaseUser currentUser;
     private String userId;
 
@@ -147,16 +149,15 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     private Handler handlerAlertas = new Handler();
     private Runnable runnableAlertas;
 
-    // Variable de Contexto (para la corrección)
+    // Variable de Contexto
     private Context mContext;
 
-    // ⭐️ --- INICIO: Variables para Calificar Zonas --- ⭐️
+    // Variables para Calificar Zonas
     private List<CalificacionZona> listaCalificaciones = new ArrayList<>();
     private List<Marker> markerCalificacionesActuales = new ArrayList<>();
-    // ⭐️ --- FIN: Variables para Calificar Zonas --- ⭐️
 
 
-    // MÉTODO onAttach (Mantiene la corrección del mContext)
+    // MÉTODO onAttach (Corregido)
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
@@ -188,7 +189,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         btnCalcularRuta = root.findViewById(R.id.btnCalcularRuta);
         btnCompartir = root.findViewById(R.id.btnCompartir);
         btnGuardarRuta = root.findViewById(R.id.btnGuardarRuta);
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(mContext); // Usar mContext
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(mContext);
 
         FloatingActionButton fabPanic = root.findViewById(R.id.fab_panic);
         fabPanic.setOnClickListener(v -> activarBotonDePanico());
@@ -279,7 +280,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         });
 
-        // Este es el listener de compartir corregido
+        // Este es el listener de compartir
         btnCompartir.setOnClickListener(v -> {
             if (origenLatLng != null && destinoLatLng != null) {
 
@@ -432,7 +433,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         cargarReportesDesdeFirestore();
 
-        // ⭐️ AÑADIDO: Cargar calificaciones de zonas ⭐️
+        // Cargar calificaciones de zonas
         cargarCalificacionesDesdeFirestore();
 
         // Cargar ruta desde historial
@@ -453,7 +454,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }, 500);
         }
 
-        // ⭐️ --- MODIFICADO: Clic largo para ELEGIR --- ⭐️
+        // --- Clic largo para ELEGIR (Reportar o Calificar) ---
         mMap.setOnMapLongClickListener(latLng -> {
             String nombreLugar = getString(R.string.ubicacion_desconocida);
             if (mContext == null || !isAdded()) { return; }
@@ -466,11 +467,11 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 }
             } catch (Exception e) { e.printStackTrace(); }
 
-            // NUEVO: Mostrar diálogo de opciones
+            // Mostrar diálogo de opciones
             mostrarDialogoOpcionesLugar(latLng, nombreLugar);
         });
 
-        // ⭐️ --- MODIFICADO: Clic en Marcador (para Votar o ver Promedio) --- ⭐️
+        // --- Clic en Marcador (para Votar o ver Promedio) ---
         mMap.setOnMarkerClickListener(marker -> {
             Object tag = marker.getTag();
 
@@ -627,8 +628,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                     .snippet(reporte.getDescripcion())
                     .icon(BitmapDescriptorFactory.defaultMarker(hue)));
 
-            // ⭐️ --- AÑADIDO: Guardamos el objeto Reporte en el Tag --- ⭐️
-            // Esto hace que el OnMarkerClickListener sea mucho más fiable
+            // Guardamos el objeto Reporte en el Tag
             marker.setTag(reporte);
 
             markerReportesActuales.add(marker);
@@ -855,58 +855,64 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     }
 
 
-    // ⭐️ --- INICIO: LÓGICA DEL BOTÓN DE PÁNICO CORREGIDA --- ⭐️
+    // ⭐️ --- INICIO: LÓGICA DEL BOTÓN DE PÁNICO (VERSIÓN INTENT SEMI-AUTOMÁTICO) --- ⭐️
 
+    /**
+     * MÉTODO REEMPLAZADO:
+     * Ya no necesita chequear permisos de SMS
+     */
     private void activarBotonDePanico() {
-        // Primero, chequear y pedir permiso de SMS
-        if (checkAndRequestSmsPermission()) {
-            // Si ya lo tenemos, iniciar el proceso de alerta
-            // (que chequeará la ubicación)
-            enviarAlerta();
-        }
+        android.util.Log.d("PanicButton", "activarBotonDePanico LLAMADO (Versión Intent)");
+
+        // Directamente llamamos a enviarAlerta (que chequeará la ubicación)
+        enviarAlerta();
     }
 
-    private boolean checkAndRequestSmsPermission() {
-        if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-            // No tenemos permiso de SMS, lo pedimos
-            requestPermissions(new String[]{Manifest.permission.SEND_SMS}, REQUEST_SMS_PERMISSION);
-            return false;
-        }
-        // Ya tenemos permiso de SMS
-        return true;
-    }
+    // El método checkAndRequestSmsPermission() se ha eliminado
 
     /**
      * MÉTODO REEMPLAZADO
      * Ahora checa el permiso de ubicación y usa getCurrentLocation para más fiabilidad.
      */
     private void enviarAlerta() {
-        if (mContext == null || !isAdded()) return;
+        android.util.Log.d("PanicButton", "enviarAlerta LLAMADO");
+        if (mContext == null || !isAdded()) {
+            android.util.Log.e("PanicButton", "enviarAlerta falló: mContext es null o no isAdded");
+            return;
+        }
 
         // --- 1. VERIFICAR PERMISO DE UBICACIÓN ---
         if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
 
+            android.util.Log.w("PanicButton", "No hay permiso de UBICACIÓN. Solicitando...");
             Toast.makeText(mContext, "Se necesita permiso de ubicación para pánico.", Toast.LENGTH_SHORT).show();
             // Pedimos el permiso de ubicación con el nuevo código
             requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PANIC_LOCATION_PERMISSION);
             return; // Nos detenemos. El proceso continuará en onRequestPermissionsResult
         }
 
-        // Si llegamos aquí, SÍ tenemos permiso de ubicación.
+        android.util.Log.d("PanicButton", "Permiso de UBICACIÓN concedido. Obteniendo ubicación actual...");
         Toast.makeText(mContext, getString(R.string.panic_obteniendo_ubicacion), Toast.LENGTH_SHORT).show();
 
         // --- 2. OBTENER UBICACIÓN ACTUAL (NO LA ÚLTIMA) ---
         fusedLocationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, null)
                 .addOnSuccessListener(location -> {
                     if (location == null) {
+                        android.util.Log.e("PanicButton", "fusedLocationClient.getCurrentLocation devolvió NULL");
                         Toast.makeText(mContext, getString(R.string.panic_error_ubicacion), Toast.LENGTH_SHORT).show();
                         return;
                     }
 
-                    if (userId == null) return;
+                    android.util.Log.d("PanicButton", "Ubicación obtenida: " + location.getLatitude());
+
+                    if (userId == null) {
+                        android.util.Log.e("PanicButton", "userId es null, no se pueden buscar contactos");
+                        return;
+                    }
 
                     // --- 3. OBTENER CONTACTOS ---
+                    android.util.Log.d("PanicButton", "Buscando contactos para userId: " + userId);
                     db.collection("usuarios").document(userId).collection("contactos")
                             .get()
                             .addOnCompleteListener(task -> {
@@ -916,39 +922,68 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                                         ContactoEmergencia contacto = doc.toObject(ContactoEmergencia.class);
                                         telefonos.add(contacto.getTelefono());
                                     }
-                                    // --- 4. ENVIAR SMS ---
+                                    android.util.Log.d("PanicButton", "Contactos encontrados: " + telefonos.size());
+                                    // --- 4. ENVIAR SMS (con Intent) ---
                                     enviarMensajeDePanico(location, telefonos);
 
                                 } else {
+                                    android.util.Log.w("PanicButton", "No se encontraron contactos de emergencia.", task.getException());
                                     Toast.makeText(mContext, getString(R.string.panic_no_contacts), Toast.LENGTH_LONG).show();
                                 }
                             });
 
-                }).addOnFailureListener(e -> Toast.makeText(mContext, getString(R.string.panic_error_ubicacion), Toast.LENGTH_SHORT).show());
+                }).addOnFailureListener(e -> {
+                    android.util.Log.e("PanicButton", "Error al obtener ubicación", e);
+                    Toast.makeText(mContext, getString(R.string.panic_error_ubicacion), Toast.LENGTH_SHORT).show();
+                });
     }
 
     /**
-     * MÉTODO REEMPLAZADO
-     * Se corrige el link de Google Maps.
+     * MÉTODO REEMPLAZADO:
+     * Ahora usa un INTENT de SMS (semi-automático) en lugar de SmsManager.
      */
     private void enviarMensajeDePanico(Location location, List<String> telefonos) {
+        android.util.Log.d("PanicButton", "enviarMensajeDePanico (Intent) LLAMADO. " + telefonos.size() + " números.");
+
+        if (telefonos.isEmpty()) {
+            android.util.Log.w("PanicButton", "No hay teléfonos en la lista.");
+            return;
+        }
+
         try {
-            SmsManager smsManager = SmsManager.getDefault();
-
-            // ⭐️ --- LINK DE GOOGLE MAPS CORREGIDO --- ⭐️
-            // 'maps.google.com/?q=' es un formato universal para buscar coordenadas
+            // 1. Crear el mensaje
             String googleMapsLink = "https://maps.google.com/?q=" + location.getLatitude() + "," + location.getLongitude();
-
             String mensaje = "¡AYUDA! (Mensaje de SafeRoute) Estoy en peligro. Mi ubicación es: " + googleMapsLink;
 
-            for (String telefono : telefonos) {
-                smsManager.sendTextMessage(telefono, null, mensaje, null, null);
+            // 2. Unir todos los números de teléfono con un ";"
+            String numerosParaUri;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                numerosParaUri = String.join(";", telefonos); // "555123;555456"
+            } else {
+                StringBuilder builder = new StringBuilder();
+                for (int i = 0; i < telefonos.size(); i++) {
+                    builder.append(telefonos.get(i));
+                    if (i < telefonos.size() - 1) {
+                        builder.append(";");
+                    }
+                }
+                numerosParaUri = builder.toString();
             }
 
-            Toast.makeText(mContext, getString(R.string.panic_sms_enviado), Toast.LENGTH_LONG).show();
+            // 3. Crear el Intent
+            android.net.Uri uri = android.net.Uri.parse("smsto:" + numerosParaUri);
+            Intent intent = new Intent(Intent.ACTION_SENDTO, uri);
+            intent.putExtra("sms_body", mensaje);
+
+            // 4. Iniciar la actividad (abrir la app de Mensajes)
+            startActivity(intent);
+
+            android.util.Log.d("PanicButton", "Intent de SMS lanzado.");
+            Toast.makeText(mContext, "Abriendo app de Mensajes...", Toast.LENGTH_LONG).show();
 
         } catch (Exception e) {
-            Toast.makeText(mContext, getString(R.string.panic_sms_error), Toast.LENGTH_LONG).show();
+            android.util.Log.e("PanicButton", "¡EXCEPCIÓN al crear Intent de SMS!", e);
+            Toast.makeText(mContext, "Error al abrir la app de Mensajes.", Toast.LENGTH_LONG).show();
             e.printStackTrace();
         }
     }
@@ -967,8 +1002,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     }
 
     /**
-     * MÉTODO REEMPLAZADO
-     * Ahora maneja las 3 solicitudes de permiso (Notificación, SMS y Ubicación de Pánico).
+     * MÉTODO REEMPLAZADO:
+     * Se elimina la lógica del permiso de SMS (REQUEST_SMS_PERMISSION)
      */
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
@@ -983,35 +1018,27 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         }
 
-        // Permiso de SMS
-        if (requestCode == REQUEST_SMS_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Toast.makeText(mContext, getString(R.string.sms_permission_granted), Toast.LENGTH_SHORT).show();
-                // Si se concede el permiso de SMS, ahora intentamos enviar la alerta
-                enviarAlerta();
-            } else {
-                Toast.makeText(mContext, getString(R.string.sms_permission_denied), Toast.LENGTH_LONG).show();
-            }
-        }
+        // Permiso de SMS (ELIMINADO, ya no se pide)
+        // if (requestCode == REQUEST_SMS_PERMISSION) { ... }
 
-        // ⭐️ --- BLOQUE AÑADIDO PARA EL PERMISO DE UBICACIÓN --- ⭐️
+        // Permiso de Ubicación de Pánico
         if (requestCode == REQUEST_PANIC_LOCATION_PERMISSION) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Si se concede el permiso de ubicación, re-intentamos enviar la alerta
-                Toast.makeText(mContext, "Permiso de ubicación concedido. Obteniendo ubicación...", Toast.LENGTH_SHORT).show();
-                enviarAlerta(); // Llamamos de nuevo. Esta vez pasará el chequeo de ubicación.
+                android.util.Log.d("PanicButton", "Permiso de Ubicación (Pánico) concedido. Llamando a enviarAlerta.");
+                enviarAlerta(); // Llamamos de nuevo.
             } else {
+                android.util.Log.w("PanicButton", "Permiso de Ubicación (Pánico) DENEGADO por el usuario.");
                 Toast.makeText(mContext, "Se necesita permiso de ubicación para enviar la alerta.", Toast.LENGTH_LONG).show();
             }
         }
     }
 
-    // ⭐️ --- FIN: LÓGICA DEL BOTÓN DE PÁNICO CORREGIDA --- ⭐️
+    // ⭐️ --- FIN: LÓGICA DEL BOTÓN DE PÁNICO (VERSIÓN INTENT SEMI-AUTOMÁTICO) --- ⭐️
 
 
     // --- Lógica de Votación (Tu código) ---
     private void mostrarDialogoConfirmacion(Reporte reporte) {
-        if (mContext == null || !isAdded()) return;
+        if (mContext == null || !isAdded() || reporte == null) return;
 
         String mensajeActual = getString(R.string.confirmacion_dialog_mensaje_actual,
                 reporte.getConfirmaciones(),
@@ -1069,7 +1096,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             return null;
         }).addOnSuccessListener(aVoid -> {
             Toast.makeText(mContext, getString(R.string.votacion_gracias), Toast.LENGTH_SHORT).show();
-            // cargarReportesDesdeFirestore(); // No es necesario, el SnapshotListener lo hace automático
+            // cargarReportesDesdeFirestore(); // El listener ya lo hace
         }).addOnFailureListener(e -> {
             Toast.makeText(mContext, getString(R.string.votacion_error), Toast.LENGTH_SHORT).show();
         });
@@ -1116,17 +1143,20 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
      * Muestra el diálogo con estrellas (RatingBar) para enviar la calificación.
      */
     private void mostrarDialogoCalificarZona(LatLng latLng, String nombreLugar) {
-        if (mContext == null || !isAdded()) return;
+        // Usar getContext() para la comprobación
+        if (getContext() == null || !isAdded()) return;
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        // Usar getContext() para el Builder
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
         builder.setTitle(getString(R.string.dialog_calificar_titulo, nombreLugar));
         builder.setMessage(R.string.dialog_calificar_mensaje);
 
-        RatingBar ratingBar = new RatingBar(mContext);
+        // Usar getContext() para crear las Vistas
+        RatingBar ratingBar = new RatingBar(getContext());
         ratingBar.setNumStars(5);
         ratingBar.setStepSize(1.0f);
 
-        LinearLayout container = new LinearLayout(mContext);
+        LinearLayout container = new LinearLayout(getContext());
         container.setGravity(android.view.Gravity.CENTER);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -1146,7 +1176,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
                 guardarCalificacionEnFirestore(geohashId, latLng, calificacion);
             } else {
-                Toast.makeText(mContext, R.string.error_calificacion_invalida, Toast.LENGTH_SHORT).show();
+                // ⭐️ --- LA LÍNEA CORREGIDA --- ⭐️
+                // Usar getContext() aquí también
+                Toast.makeText(getContext(), R.string.error_calificacion_invalida, Toast.LENGTH_SHORT).show();
             }
         });
         builder.setNegativeButton(R.string.cancelar, (dialog, id) -> dialog.dismiss());
@@ -1184,7 +1216,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         }).addOnSuccessListener(aVoid -> {
             Toast.makeText(mContext, getString(R.string.calificacion_exitosa), Toast.LENGTH_SHORT).show();
         }).addOnFailureListener(e -> {
-            // Este es el error que veías. Ahora está solucionado en las Reglas de Firestore.
             android.util.Log.e("FirestoreCalificacion", "Error al guardar la calificación", e);
             Toast.makeText(mContext, getString(R.string.calificacion_error), Toast.LENGTH_SHORT).show();
         });
@@ -1247,4 +1278,4 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     // ⭐️ --- FIN: MÉTODOS PARA CALIFICAR ZONAS --- ⭐️
 
-}
+} // Fin de la clase HomeFragment
