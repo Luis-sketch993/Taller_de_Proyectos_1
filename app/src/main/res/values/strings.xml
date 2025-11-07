@@ -84,4 +84,14 @@
         <item>English</item>
     </string-array>
 
+    <string name="opcion_reportar_incidente">Reportar un Incidente</string>
+    <string name="opcion_calificar_zona">Calificar Seguridad de esta Zona</string>
+    <string name="dialog_calificar_titulo">Calificar Seguridad de:\n%1$s</string>
+    <string name="dialog_calificar_mensaje">1 estrella = Muy Inseguro\n5 estrellas = Muy Seguro</string>
+    <string name="enviar_calificacion">Enviar</string>
+    <string name="error_calificacion_invalida">Por favor, selecciona al menos 1 estrella</string>
+    <string name="calificacion_exitosa">¡Gracias por tu calificación!</string>
+    <string name="calificacion_error">Error al guardar la calificación</string>
+    <string name="calificacion_promedio_titulo">Calificación de Seguridad</string>
+
 </resources>

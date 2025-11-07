@@ -7,7 +7,6 @@ import androidx.appcompat.app.AlertDialog;
 import com.example.myapplicationf.Models.ContactoEmergencia;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
-// 🔹 IMPORTACIÓN AÑADIDA QUE CORRIGE EL ERROR 🔹
 import android.content.Context;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -90,11 +89,15 @@ import java.util.List;
 import java.util.Locale;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
-import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Transaction;
 import java.util.Map;
 import java.util.HashMap;
 
+// ⭐️ --- IMPORTACIONES NUEVAS PARA CALIFICACIONES --- ⭐️
+import com.example.myapplicationf.Models.CalificacionZona;
+import android.widget.RatingBar;
+import android.widget.LinearLayout;
+// ⭐️ --- FIN DE IMPORTACIONES NUEVAS --- ⭐️
 
 
 public class HomeFragment extends Fragment implements OnMapReadyCallback {
@@ -115,6 +118,8 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     // Variables para Botón de Pánico y SMS
     private static final int REQUEST_SMS_PERMISSION = 1002;
+    // ⭐️ CÓDIGO AÑADIDO PARA EL PERMISO DE UBICACIÓN DE PÁNICO ⭐️
+    private static final int REQUEST_PANIC_LOCATION_PERMISSION = 1003;
     private FirebaseUser currentUser;
     private String userId;
 
@@ -145,13 +150,17 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     // Variable de Contexto (para la corrección)
     private Context mContext;
 
-    // MÉTODO onAttach (para la corrección)
+    // ⭐️ --- INICIO: Variables para Calificar Zonas --- ⭐️
+    private List<CalificacionZona> listaCalificaciones = new ArrayList<>();
+    private List<Marker> markerCalificacionesActuales = new ArrayList<>();
+    // ⭐️ --- FIN: Variables para Calificar Zonas --- ⭐️
+
+
+    // MÉTODO onAttach (Mantiene la corrección del mContext)
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
         mContext = context; // Guardamos el contexto
-
-        // Inicializamos Notificaciones_Zonas aquí de forma segura
         notificacionesZonas = new Notificaciones_Zonas(mContext);
     }
 
@@ -297,7 +306,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         });
 
         btnGuardarRuta.setOnClickListener(v -> {
-            if (getContext() == null || !isAdded()) {
+            if (mContext == null || !isAdded()) {
                 return;
             }
 
@@ -308,7 +317,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                     !nombreOrigen.isEmpty() && !nombreDestino.isEmpty()) {
 
                 if (userId == null) {
-                    Toast.makeText(getContext(), getString(R.string.historial_no_login), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(mContext, getString(R.string.historial_no_login), Toast.LENGTH_SHORT).show();
                     return;
                 }
 
@@ -326,25 +335,23 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 db.collection("historialRutas")
                         .add(nuevaRuta)
                         .addOnSuccessListener(documentReference -> {
-                            if (getContext() != null && isAdded()) {
-                                Toast.makeText(getContext(), getString(R.string.historial_ruta_guardada), Toast.LENGTH_SHORT).show();
+                            if (mContext != null && isAdded()) {
+                                Toast.makeText(mContext, getString(R.string.historial_ruta_guardada), Toast.LENGTH_SHORT).show();
                             }
                         })
                         .addOnFailureListener(e -> {
-                            if (getContext() != null && isAdded()) {
-                                Toast.makeText(getContext(), getString(R.string.historial_error_guardar), Toast.LENGTH_SHORT).show();
+                            if (mContext != null && isAdded()) {
+                                Toast.makeText(mContext, getString(R.string.historial_error_guardar), Toast.LENGTH_SHORT).show();
                             }
                         });
             } else {
-                Toast.makeText(getContext(), getString(R.string.historial_selecciona_ruta), Toast.LENGTH_SHORT).show();
+                Toast.makeText(mContext, getString(R.string.historial_selecciona_ruta), Toast.LENGTH_SHORT).show();
             }
         });
 
         actualizarTextosUI();
         solicitarPermisoNotificaciones();
 
-        // Estas líneas ahora son seguras porque notificacionesZonas se
-        // inicializó en onAttach()
         intervaloEnvio = notificacionesZonas.getIntervaloAlertas();
         intervaloNotificacion = intervaloEnvio;
 
@@ -425,6 +432,9 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
         cargarReportesDesdeFirestore();
 
+        // ⭐️ AÑADIDO: Cargar calificaciones de zonas ⭐️
+        cargarCalificacionesDesdeFirestore();
+
         // Cargar ruta desde historial
         if (getArguments() != null && getArguments().containsKey("origenLat")) {
             Bundle args = getArguments();
@@ -443,13 +453,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }, 500);
         }
 
-        // Clic largo para reportar (Corregido)
+        // ⭐️ --- MODIFICADO: Clic largo para ELEGIR --- ⭐️
         mMap.setOnMapLongClickListener(latLng -> {
             String nombreLugar = getString(R.string.ubicacion_desconocida);
-
-            if (mContext == null || !isAdded()) {
-                return;
-            }
+            if (mContext == null || !isAdded()) { return; }
 
             try {
                 Geocoder geocoder = new Geocoder(mContext, new Locale(idiomaSeleccionado));
@@ -459,38 +466,28 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                 }
             } catch (Exception e) { e.printStackTrace(); }
 
-            Bundle bundle = new Bundle();
-            bundle.putDouble("lat", latLng.latitude);
-            bundle.putDouble("lng", latLng.longitude);
-            bundle.putString("nombreLugar", nombreLugar);
-
-            if (getActivity() != null) {
-                NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment_content_contenido_general);
-                navController.navigate(R.id.nav_gallery, bundle);
-            }
+            // NUEVO: Mostrar diálogo de opciones
+            mostrarDialogoOpcionesLugar(latLng, nombreLugar);
         });
 
-        // 🚨 CÓDIGO AÑADIDO PARA LA HU-29: Votación en Marcadores
+        // ⭐️ --- MODIFICADO: Clic en Marcador (para Votar o ver Promedio) --- ⭐️
         mMap.setOnMarkerClickListener(marker -> {
-            // Buscar el reporte asociado a este marcador
-            Reporte reporteSeleccionado = null;
-            for (Reporte r : listaDeReportes) {
-                if (marker.getPosition().latitude == r.getLat() && marker.getPosition().longitude == r.getLng()) {
-                    reporteSeleccionado = r;
-                    break;
-                }
+            Object tag = marker.getTag();
+
+            // Si el Tag es un objeto 'Reporte', mostramos el diálogo de votación
+            if (tag instanceof Reporte) {
+                Reporte reporteSeleccionado = (Reporte) tag;
+                mostrarDialogoConfirmacion(reporteSeleccionado);
+                return true; // Consume el evento (no muestra la info window)
             }
 
-            if (reporteSeleccionado != null && reporteSeleccionado.getId() != null) {
-                // Mostrar el diálogo de confirmación/denuncia
-                mostrarDialogoConfirmacion(reporteSeleccionado);
-            }
-            // Devolvemos false para permitir que se siga mostrando la InfoWindow normal
+            // Si no, (es una Calificación o ruta), dejamos que se muestre la info window
             return false;
         });
 
         mMap.setOnMapClickListener(null);
     }
+
 
     private void setAutocomplete(AutoCompleteTextView editText, boolean esOrigen) {
         editText.setThreshold(1);
@@ -556,37 +553,22 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
 
     private void cargarReportesDesdeFirestore() {
         db.collection("reportes").addSnapshotListener((snapshots, e) -> {
-            // Si hay error o el fragmento ya no está activo, no hacer nada
-            if (e != null || mContext == null || !isAdded()) {
-                return;
-            }
-
-            // Si no hay datos, salir
-            if (snapshots == null) {
-                return;
-            }
+            if (e != null || mContext == null || !isAdded()) { return; }
+            if (snapshots == null) { return; }
 
             listaDeReportes.clear();
-
             for (QueryDocumentSnapshot doc : snapshots) {
                 Reporte reporte = doc.toObject(Reporte.class);
                 if (reporte == null) continue;
 
-                // 🔥 Aseguramos que cada reporte tenga su ID
                 reporte.setId(doc.getId());
-
-                // 🧩 Aseguramos un valor por defecto para el estado
                 if (reporte.getEstado() == null || reporte.getEstado().trim().isEmpty()) {
                     reporte.setEstado("Pendiente");
                 }
-
-                // 🚨 Filtrar los reportes marcados como "Falso"
                 if (!"Falso".equalsIgnoreCase(reporte.getEstado())) {
                     listaDeReportes.add(reporte);
                 }
             }
-
-            // 🗺️ Redibujar reportes en el mapa si está disponible
             if (mMap != null && !listaDeReportes.isEmpty()) {
                 dibujarReportesEnMapa();
             }
@@ -644,6 +626,10 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
                     .title(riesgoStr + ": " + reporte.getNombreLugar())
                     .snippet(reporte.getDescripcion())
                     .icon(BitmapDescriptorFactory.defaultMarker(hue)));
+
+            // ⭐️ --- AÑADIDO: Guardamos el objeto Reporte en el Tag --- ⭐️
+            // Esto hace que el OnMarkerClickListener sea mucho más fiable
+            marker.setTag(reporte);
 
             markerReportesActuales.add(marker);
         }
@@ -735,7 +721,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
-    // Lógica de "Ruta Segura" (Corregida)
+    // Lógica de "Ruta Segura"
     private int calcularPuntajeRiesgo(List<LatLng> puntos) {
         int puntajeRiesgo = 0;
         for (LatLng punto : puntos) {
@@ -798,7 +784,7 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         return poly;
     }
 
-    // Lógica de Alertas (Versión simple)
+    // Lógica de Alertas
     private void iniciarAlertasZonas() {
         runnableAlertas = new Runnable() {
             @Override
@@ -869,64 +855,90 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
     }
 
 
-    // --- Lógica del Botón de Pánico ---
+    // ⭐️ --- INICIO: LÓGICA DEL BOTÓN DE PÁNICO CORREGIDA --- ⭐️
 
     private void activarBotonDePanico() {
+        // Primero, chequear y pedir permiso de SMS
         if (checkAndRequestSmsPermission()) {
+            // Si ya lo tenemos, iniciar el proceso de alerta
+            // (que chequeará la ubicación)
             enviarAlerta();
         }
     }
 
     private boolean checkAndRequestSmsPermission() {
         if (ContextCompat.checkSelfPermission(mContext, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
+            // No tenemos permiso de SMS, lo pedimos
             requestPermissions(new String[]{Manifest.permission.SEND_SMS}, REQUEST_SMS_PERMISSION);
             return false;
         }
+        // Ya tenemos permiso de SMS
         return true;
     }
 
+    /**
+     * MÉTODO REEMPLAZADO
+     * Ahora checa el permiso de ubicación y usa getCurrentLocation para más fiabilidad.
+     */
     private void enviarAlerta() {
         if (mContext == null || !isAdded()) return;
 
-        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Toast.makeText(mContext, "Se necesita permiso de ubicación", Toast.LENGTH_SHORT).show();
-            return;
+        // --- 1. VERIFICAR PERMISO DE UBICACIÓN ---
+        if (ActivityCompat.checkSelfPermission(mContext, Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+
+            Toast.makeText(mContext, "Se necesita permiso de ubicación para pánico.", Toast.LENGTH_SHORT).show();
+            // Pedimos el permiso de ubicación con el nuevo código
+            requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_PANIC_LOCATION_PERMISSION);
+            return; // Nos detenemos. El proceso continuará en onRequestPermissionsResult
         }
 
+        // Si llegamos aquí, SÍ tenemos permiso de ubicación.
         Toast.makeText(mContext, getString(R.string.panic_obteniendo_ubicacion), Toast.LENGTH_SHORT).show();
 
-        fusedLocationClient.getLastLocation().addOnSuccessListener(location -> {
-            if (location == null) {
-                Toast.makeText(mContext, getString(R.string.panic_error_ubicacion), Toast.LENGTH_SHORT).show();
-                return;
-            }
+        // --- 2. OBTENER UBICACIÓN ACTUAL (NO LA ÚLTIMA) ---
+        fusedLocationClient.getCurrentLocation(com.google.android.gms.location.Priority.PRIORITY_HIGH_ACCURACY, null)
+                .addOnSuccessListener(location -> {
+                    if (location == null) {
+                        Toast.makeText(mContext, getString(R.string.panic_error_ubicacion), Toast.LENGTH_SHORT).show();
+                        return;
+                    }
 
-            if (userId == null) return;
+                    if (userId == null) return;
 
-            db.collection("usuarios").document(userId).collection("contactos")
-                    .get()
-                    .addOnCompleteListener(task -> {
-                        if (task.isSuccessful() && task.getResult() != null && !task.getResult().isEmpty()) {
-                            List<String> telefonos = new ArrayList<>();
-                            for (QueryDocumentSnapshot doc : task.getResult()) {
-                                ContactoEmergencia contacto = doc.toObject(ContactoEmergencia.class);
-                                telefonos.add(contacto.getTelefono());
-                            }
-                            enviarMensajeDePanico(location, telefonos);
+                    // --- 3. OBTENER CONTACTOS ---
+                    db.collection("usuarios").document(userId).collection("contactos")
+                            .get()
+                            .addOnCompleteListener(task -> {
+                                if (task.isSuccessful() && task.getResult() != null && !task.getResult().isEmpty()) {
+                                    List<String> telefonos = new ArrayList<>();
+                                    for (QueryDocumentSnapshot doc : task.getResult()) {
+                                        ContactoEmergencia contacto = doc.toObject(ContactoEmergencia.class);
+                                        telefonos.add(contacto.getTelefono());
+                                    }
+                                    // --- 4. ENVIAR SMS ---
+                                    enviarMensajeDePanico(location, telefonos);
 
-                        } else {
-                            Toast.makeText(mContext, getString(R.string.panic_no_contacts), Toast.LENGTH_LONG).show();
-                        }
-                    });
+                                } else {
+                                    Toast.makeText(mContext, getString(R.string.panic_no_contacts), Toast.LENGTH_LONG).show();
+                                }
+                            });
 
-        }).addOnFailureListener(e -> Toast.makeText(mContext, getString(R.string.panic_error_ubicacion), Toast.LENGTH_SHORT).show());
+                }).addOnFailureListener(e -> Toast.makeText(mContext, getString(R.string.panic_error_ubicacion), Toast.LENGTH_SHORT).show());
     }
 
+    /**
+     * MÉTODO REEMPLAZADO
+     * Se corrige el link de Google Maps.
+     */
     private void enviarMensajeDePanico(Location location, List<String> telefonos) {
         try {
             SmsManager smsManager = SmsManager.getDefault();
-            // 🔹 URL DE GOOGLE MAPS CORREGIDA (de nuevo) 🔹
-            String googleMapsLink = "http://maps.google.com/maps?q=" + location.getLatitude() + "," + location.getLongitude();
+
+            // ⭐️ --- LINK DE GOOGLE MAPS CORREGIDO --- ⭐️
+            // 'maps.google.com/?q=' es un formato universal para buscar coordenadas
+            String googleMapsLink = "https://maps.google.com/?q=" + location.getLatitude() + "," + location.getLongitude();
+
             String mensaje = "¡AYUDA! (Mensaje de SafeRoute) Estoy en peligro. Mi ubicación es: " + googleMapsLink;
 
             for (String telefono : telefonos) {
@@ -954,10 +966,15 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         }
     }
 
+    /**
+     * MÉTODO REEMPLAZADO
+     * Ahora maneja las 3 solicitudes de permiso (Notificación, SMS y Ubicación de Pánico).
+     */
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
+        // Permiso de Notificaciones
         if (requestCode == REQUEST_NOTIFICATION_PERMISSION) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(mContext, "Permiso de notificación concedido", Toast.LENGTH_SHORT).show();
@@ -966,17 +983,33 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             }
         }
 
+        // Permiso de SMS
         if (requestCode == REQUEST_SMS_PERMISSION) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 Toast.makeText(mContext, getString(R.string.sms_permission_granted), Toast.LENGTH_SHORT).show();
+                // Si se concede el permiso de SMS, ahora intentamos enviar la alerta
                 enviarAlerta();
             } else {
                 Toast.makeText(mContext, getString(R.string.sms_permission_denied), Toast.LENGTH_LONG).show();
             }
         }
+
+        // ⭐️ --- BLOQUE AÑADIDO PARA EL PERMISO DE UBICACIÓN --- ⭐️
+        if (requestCode == REQUEST_PANIC_LOCATION_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Si se concede el permiso de ubicación, re-intentamos enviar la alerta
+                Toast.makeText(mContext, "Permiso de ubicación concedido. Obteniendo ubicación...", Toast.LENGTH_SHORT).show();
+                enviarAlerta(); // Llamamos de nuevo. Esta vez pasará el chequeo de ubicación.
+            } else {
+                Toast.makeText(mContext, "Se necesita permiso de ubicación para enviar la alerta.", Toast.LENGTH_LONG).show();
+            }
+        }
     }
 
-    // 🚨 CÓDIGO ACTUALIZADO: Diálogo para Confirmar o Denunciar un reporte
+    // ⭐️ --- FIN: LÓGICA DEL BOTÓN DE PÁNICO CORREGIDA --- ⭐️
+
+
+    // --- Lógica de Votación (Tu código) ---
     private void mostrarDialogoConfirmacion(Reporte reporte) {
         if (mContext == null || !isAdded()) return;
 
@@ -998,7 +1031,6 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         builder.create().show();
     }
 
-    // 🚨 CÓDIGO ACTUALIZADO: Lógica de Votación y Transacción en Firestore
     private void votarPorReporte(Reporte reporte, boolean confirmar) {
         if (userId == null || reporte.getId() == null) {
             Toast.makeText(mContext, getString(R.string.error_votacion_login), Toast.LENGTH_SHORT).show();
@@ -1010,28 +1042,24 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
         db.runTransaction(transaction -> {
             DocumentSnapshot snapshot = transaction.get(reporteRef);
 
-            // Obtenemos valores actuales
             long confirmaciones = snapshot.getLong("confirmaciones") != null ? snapshot.getLong("confirmaciones") : 0;
             long denuncias = snapshot.getLong("denuncias") != null ? snapshot.getLong("denuncias") : 0;
             String estado = snapshot.getString("estado");
 
-            // Aplica el voto
             if (confirmar) {
                 confirmaciones++;
             } else {
                 denuncias++;
             }
 
-            // Aplica reglas de verificación automática
             if (confirmaciones >= 5 && confirmaciones > denuncias) {
                 estado = "Verificado";
             } else if (denuncias >= 10 && denuncias > confirmaciones) {
                 estado = "Falso";
             } else {
-                estado = "Pendiente"; // sigue igual mientras no se cumpla una regla
+                estado = "Pendiente";
             }
 
-            // Actualiza Firestore
             Map<String, Object> updates = new HashMap<>();
             updates.put("confirmaciones", confirmaciones);
             updates.put("denuncias", denuncias);
@@ -1041,10 +1069,182 @@ public class HomeFragment extends Fragment implements OnMapReadyCallback {
             return null;
         }).addOnSuccessListener(aVoid -> {
             Toast.makeText(mContext, getString(R.string.votacion_gracias), Toast.LENGTH_SHORT).show();
-            cargarReportesDesdeFirestore(); // Refresca la interfaz
+            // cargarReportesDesdeFirestore(); // No es necesario, el SnapshotListener lo hace automático
         }).addOnFailureListener(e -> {
             Toast.makeText(mContext, getString(R.string.votacion_error), Toast.LENGTH_SHORT).show();
         });
     }
+
+
+    // ⭐️ --- INICIO: MÉTODOS PARA CALIFICAR ZONAS (Añadidos) --- ⭐️
+
+    /**
+     * Muestra un diálogo para elegir entre "Reportar Incidente" o "Calificar Zona".
+     */
+    private void mostrarDialogoOpcionesLugar(LatLng latLng, String nombreLugar) {
+        if (mContext == null || !isAdded()) return;
+
+        CharSequence[] opciones = {
+                getString(R.string.opcion_reportar_incidente), // Opción 0
+                getString(R.string.opcion_calificar_zona)     // Opción 1
+        };
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        builder.setTitle(nombreLugar)
+                .setItems(opciones, (dialog, which) -> {
+                    if (which == 0) {
+                        // --- Opción 0: Reportar Incidente (Tu lógica anterior) ---
+                        Bundle bundle = new Bundle();
+                        bundle.putDouble("lat", latLng.latitude);
+                        bundle.putDouble("lng", latLng.longitude);
+                        bundle.putString("nombreLugar", nombreLugar);
+
+                        if (getActivity() != null) {
+                            NavController navController = Navigation.findNavController(requireActivity(), R.id.nav_host_fragment_content_contenido_general);
+                            navController.navigate(R.id.nav_gallery, bundle);
+                        }
+                    } else {
+                        // --- Opción 1: Calificar Zona (Nueva Lógica) ---
+                        mostrarDialogoCalificarZona(latLng, nombreLugar);
+                    }
+                })
+                .setNegativeButton(R.string.cancelar, (dialog, id) -> dialog.dismiss());
+        builder.create().show();
+    }
+
+    /**
+     * Muestra el diálogo con estrellas (RatingBar) para enviar la calificación.
+     */
+    private void mostrarDialogoCalificarZona(LatLng latLng, String nombreLugar) {
+        if (mContext == null || !isAdded()) return;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        builder.setTitle(getString(R.string.dialog_calificar_titulo, nombreLugar));
+        builder.setMessage(R.string.dialog_calificar_mensaje);
+
+        RatingBar ratingBar = new RatingBar(mContext);
+        ratingBar.setNumStars(5);
+        ratingBar.setStepSize(1.0f);
+
+        LinearLayout container = new LinearLayout(mContext);
+        container.setGravity(android.view.Gravity.CENTER);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        lp.setMargins(20, 30, 20, 30);
+        ratingBar.setLayoutParams(lp);
+        container.addView(ratingBar);
+
+        builder.setView(container);
+
+        builder.setPositiveButton(R.string.enviar_calificacion, (dialog, which) -> {
+            int calificacion = (int) ratingBar.getRating();
+            if (calificacion > 0) {
+                String geohashId = "geo_" + String.format(Locale.US, "%.4f", latLng.latitude) +
+                        "_" + String.format(Locale.US, "%.4f", latLng.longitude);
+
+                guardarCalificacionEnFirestore(geohashId, latLng, calificacion);
+            } else {
+                Toast.makeText(mContext, R.string.error_calificacion_invalida, Toast.LENGTH_SHORT).show();
+            }
+        });
+        builder.setNegativeButton(R.string.cancelar, (dialog, id) -> dialog.dismiss());
+        builder.create().show();
+    }
+
+    /**
+     * Guarda o actualiza la calificación en Firestore usando una transacción.
+     */
+    private void guardarCalificacionEnFirestore(String geohashId, LatLng latLng, int calificacion) {
+        if (userId == null) {
+            Toast.makeText(mContext, getString(R.string.historial_no_login), Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        DocumentReference zonaRef = db.collection("calificacionesZonas").document(geohashId);
+
+        db.runTransaction((Transaction.Function<Void>) transaction -> {
+            DocumentSnapshot snapshot = transaction.get(zonaRef);
+
+            if (!snapshot.exists()) {
+                CalificacionZona nuevaZona = new CalificacionZona(
+                        latLng.latitude,
+                        latLng.longitude,
+                        (long) calificacion, 1L );
+                transaction.set(zonaRef, nuevaZona);
+            } else {
+                CalificacionZona zona = snapshot.toObject(CalificacionZona.class);
+                long nuevaSuma = (zona.getSumaCalificaciones() != null ? zona.getSumaCalificaciones() : 0) + calificacion;
+                long nuevoNum = (zona.getNumCalificaciones() != null ? zona.getNumCalificaciones() : 0) + 1;
+
+                transaction.update(zonaRef, "sumaCalificaciones", nuevaSuma, "numCalificaciones", nuevoNum);
+            }
+            return null;
+        }).addOnSuccessListener(aVoid -> {
+            Toast.makeText(mContext, getString(R.string.calificacion_exitosa), Toast.LENGTH_SHORT).show();
+        }).addOnFailureListener(e -> {
+            // Este es el error que veías. Ahora está solucionado en las Reglas de Firestore.
+            android.util.Log.e("FirestoreCalificacion", "Error al guardar la calificación", e);
+            Toast.makeText(mContext, getString(R.string.calificacion_error), Toast.LENGTH_SHORT).show();
+        });
+    }
+
+    /**
+     * Carga todas las zonas calificadas desde Firestore y activa el dibujado.
+     */
+    private void cargarCalificacionesDesdeFirestore() {
+        db.collection("calificacionesZonas").addSnapshotListener((snapshots, e) -> {
+            if (e != null || mContext == null || !isAdded()) { return; }
+            if (snapshots == null) { return; }
+
+            listaCalificaciones.clear();
+            for (QueryDocumentSnapshot doc : snapshots) {
+                CalificacionZona calificacion = doc.toObject(CalificacionZona.class);
+                if (calificacion != null && calificacion.getNumCalificaciones() != null && calificacion.getNumCalificaciones() > 0) {
+                    listaCalificaciones.add(calificacion);
+                }
+            }
+            if (mMap != null) {
+                dibujarCalificacionesEnMapa();
+            }
+        });
+    }
+
+    /**
+     * Dibuja las calificaciones promedio en el mapa como marcadores de colores.
+     */
+    private void dibujarCalificacionesEnMapa() {
+        if (mMap == null) return;
+
+        for (Marker marker : markerCalificacionesActuales) { marker.remove(); }
+        markerCalificacionesActuales.clear();
+
+        for (CalificacionZona zona : listaCalificaciones) {
+            double promedio = (double) zona.getSumaCalificaciones() / zona.getNumCalificaciones();
+
+            float hue;
+            if (promedio < 2.0) { // Inseguro (Rojo)
+                hue = BitmapDescriptorFactory.HUE_RED;
+            } else if (promedio < 3.5) { // Moderado (Naranja/Amarillo)
+                hue = BitmapDescriptorFactory.HUE_ORANGE;
+            } else { // Seguro (Verde)
+                hue = BitmapDescriptorFactory.HUE_GREEN;
+            }
+
+            Marker marker = mMap.addMarker(new MarkerOptions()
+                    .position(new LatLng(zona.getLat(), zona.getLng()))
+                    .title(getString(R.string.calificacion_promedio_titulo))
+                    .snippet(String.format(Locale.US, "Promedio: %.1f/5.0 (%d votos)", promedio, zona.getNumCalificaciones()))
+                    .icon(BitmapDescriptorFactory.defaultMarker(hue))
+                    .alpha(0.8f));
+
+            // NO le ponemos un Tag, así el OnMarkerClickListener sabe que no es un reporte
+
+            markerCalificacionesActuales.add(marker);
+        }
+    }
+
+    // ⭐️ --- FIN: MÉTODOS PARA CALIFICAR ZONAS --- ⭐️
 
 }
